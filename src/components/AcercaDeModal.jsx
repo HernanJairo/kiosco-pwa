@@ -6,7 +6,7 @@ import Logo from '../assets/logo'
 
 // Versión visible de la app: incrementar en cada deploy para identificar
 // qué build está corriendo cada dispositivo (PWA cachea agresivamente).
-export const APP_VERSION = 'v1.4.0'
+export const APP_VERSION = 'v1.5.0'
 export const APP_BUILD = 'Build 2026.11'
 
 // Borra el caché del service worker / Cache Storage y recarga. Los datos
@@ -37,21 +37,21 @@ export default function AcercaDeModal({ open, onClose }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Acerca de KioscoApp">
+    <Modal open={open} onClose={onClose} title="Acerca de Yapa">
       <div className="flex flex-col items-center gap-3 text-center">
         <Logo className="h-14 w-14" />
         <div>
           <p className="text-base font-bold text-slate-800">
-            Kiosco<span className="text-emerald-600">App</span>
+            Yapa
           </p>
-          <p className="mt-0.5 font-mono text-xs font-semibold text-emerald-600">
+          <p className="mt-0.5 font-mono text-xs font-semibold text-brand">
             {APP_VERSION} · {APP_BUILD}
           </p>
         </div>
 
         <ul className="flex w-full flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-left">
           <li className="flex items-center gap-2 text-xs text-slate-600">
-            <BadgeCheck size={14} className="shrink-0 text-emerald-500" />
+            <BadgeCheck size={14} className="shrink-0 text-brand" />
             PWA lista para producción / Conexión Firebase preparada
           </li>
           <li className="flex items-center gap-2 text-xs text-slate-600">

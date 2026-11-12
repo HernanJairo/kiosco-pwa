@@ -20,19 +20,19 @@ export default function LandingHeader({ onContact, onCatalog, enCatalogo = false
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setAcercaOpen(true)}
-              title="Acerca de KioscoApp"
+              title="Acerca de Yapa"
               aria-label="Ver versión y créditos de la app"
               className="flex items-center gap-2 rounded-lg px-1.5 py-0.5 transition-colors hover:bg-slate-50"
             >
               <Logo className="h-8 w-8" />
               <p className="text-sm font-bold text-slate-800">
-                Kiosco<span className="text-emerald-600">App</span>
+                Yapa
               </p>
             </button>
             <button
               onClick={() => setAcercaOpen(true)}
               title="Versión y créditos"
-              aria-label="Acerca de KioscoApp"
+              aria-label="Acerca de Yapa"
               className="rounded-full p-1.5 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500"
             >
               <Info size={14} />

@@ -6,5 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     allowedHosts: true
+  },
+  build: {
+    // El bundle completo (~500 kB) ya incluye módulos y assets; umbral ajustado.
+    chunkSizeWarningLimit: 600
   }
 })

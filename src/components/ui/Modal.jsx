@@ -22,9 +22,9 @@ export default function Modal({ open, onClose, title, wide = false, children }) 
       aria-modal="true"
       aria-label={title}
     >
-      <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-[#202125]/50 backdrop-blur-sm" onClick={onClose} />
       <div
-        className={`pop-in relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl ${
+        className={`pop-in relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-lift sm:rounded-3xl ${
           wide ? 'sm:max-w-2xl' : 'sm:max-w-md'
         }`}
       >

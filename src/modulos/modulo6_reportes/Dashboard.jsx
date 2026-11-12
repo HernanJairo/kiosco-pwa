@@ -5,7 +5,12 @@ import {
   HandCoins,
   Landmark,
   Medal,
+  PackageX,
+  Percent,
   Receipt,
+  RefreshCw,
+  Sparkles,
+  Star,
   TrendingUp,
   TriangleAlert,
 } from 'lucide-react'
@@ -15,7 +20,7 @@ import Card from '../../components/ui/Card'
 import StatCard from '../../components/ui/StatCard'
 
 const METODOS = [
-  { k: 'efectivo', label: 'Efectivo', icon: Banknote, bar: 'bg-emerald-500', text: 'text-emerald-600', hex: '#10b981' },
+  { k: 'efectivo', label: 'Efectivo', icon: Banknote, bar: 'bg-emerald-500', text: 'text-brand', hex: '#10b981' },
   { k: 'transferencia', label: 'Transferencia', icon: Landmark, bar: 'bg-indigo-500', text: 'text-indigo-600', hex: '#6366f1' },
   { k: 'fiado', label: 'Fiado', icon: HandCoins, bar: 'bg-amber-500', text: 'text-amber-600', hex: '#f59e0b' },
 ]
@@ -87,6 +92,85 @@ export default function Dashboard() {
   const maxTop = Math.max(1, ...stats.top10.map((t) => t.cant))
   const periodo = RANGO_TXT[rango]
 
+  /* ==== Motor de Recomendaciones & Ciencia de Datos ====
+     Se calcula sobre TODO el historial de tickets (sin el filtro de
+     período, que es para KPIs) para que las señales sean estables. */
+  const reco = useMemo(() => {
+    const vendidas = ventas.filter((v) => !v.anulada && v.estado !== 'en_espera_transferencia')
+    const porProd = {} // productoId → {cant, monto, margen}
+    const pares = new Map() // 'a|b' → {a, b, veces}
+
+    for (const v of vendidas) {
+      const ids = [...new Set(v.items.map((i) => i.productoId).filter(Boolean))]
+      for (const it of v.items) {
+        const u = (porProd[it.productoId] ||= { cant: 0, monto: 0, margen: 0 })
+        u.cant += it.cantidad
+        u.monto += it.precio * it.cantidad
+        u.margen += (it.precio - (it.costo || 0)) * it.cantidad
+      }
+      // Reglas de asociación: pares de productos del mismo ticket.
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          const [a, b] = [ids[i], ids[j]].sort()
+          const k = `${a}|${b}`
+          const par = pares.get(k) || { a, b, veces: 0 }
+          par.veces += 1
+          pares.set(k, par)
+        }
+      }
+    }
+
+    const prodById = Object.fromEntries(productos.map((p) => [p.id, p]))
+
+    // Combos: pares más frecuentes con precio sugerido (10% menos que
+    // comprarlos por separado, redondeado a decenas).
+    const combos = [...pares.values()]
+      .filter((x) => x.veces >= 1 && prodById[x.a] && prodById[x.b])
+      .sort((x, y) => y.veces - x.veces)
+      .slice(0, 3)
+      .map((x) => {
+        const pa = prodById[x.a]
+        const pb = prodById[x.b]
+        const separados = pa.precio + pb.precio
+        return {
+          ...x,
+          pa,
+          pb,
+          separados,
+          precioCombo: Math.round((separados * 0.9) / 10) * 10,
+        }
+      })
+
+    // Baja rotación: stock alto (≥ 2× mínimo o ≥ 6 unidades) con ventas
+    // casi nulas → candidatos a liquidación / promo.
+    const rotacion = productos
+      .map((p) => ({
+        p,
+        vendidasU: porProd[p.id]?.cant || 0,
+        inmovilizado: p.stock * (p.costo || p.precio),
+      }))
+      .filter((x) => x.p.stock >= Math.max(6, (x.p.stockMin || 0) * 2) && x.vendidasU <= 1)
+      .sort((a, b) => b.inmovilizado - a.inmovilizado)
+      .slice(0, 3)
+
+    // Estrellas: líderes de margen y volumen del historial.
+    const estrellas = productos
+      .map((p) => ({ p, ...(porProd[p.id] || { cant: 0, monto: 0, margen: 0 }) }))
+      .filter((x) => x.cant > 0)
+      .sort((a, b) => b.margen - a.margen || b.cant - a.cant)
+      .slice(0, 3)
+
+    // Reposición crítica: bajo el mínimo (o casi agotado), priorizando los
+    // que más rotan.
+    const reposicion = productos
+      .map((p) => ({ p, cant: porProd[p.id]?.cant || 0 }))
+      .filter((x) => x.p.stock <= (x.p.stockMin || 0) || x.p.stock < 5)
+      .sort((a, b) => b.cant - a.cant || a.p.stock - b.p.stock)
+      .slice(0, 4)
+
+    return { combos, rotacion, estrellas, reposicion, tickets: vendidas.length }
+  }, [ventas, productos])
+
   // Distribución proporcional por método de pago para el anillo SVG
   const totalMetodos = METODOS.reduce((s, m) => s + stats.porMetodo[m.k], 0)
   const DONUT_R = 45
@@ -103,15 +187,15 @@ export default function Dashboard() {
     <div className="flex flex-col gap-5">
       {/* Filtros temporales */}
       <div className="flex flex-wrap items-center gap-2">
-        <CalendarDays size={16} className="text-emerald-600" />
+        <CalendarDays size={16} className="text-brand" />
         {RANGOS.map((r) => (
           <button
             key={r.k}
             onClick={() => setRango(r.k)}
             className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
               rango === r.k
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'border border-slate-200 bg-white text-slate-600 hover:border-emerald-300 hover:text-emerald-600'
+                ? 'bg-brand text-white shadow-sm'
+                : 'bg-[#F6F6F6] text-slate-600 hover:bg-[#EBF7FD] hover:text-[#007AB8]'
             }`}
           >
             {r.label}
@@ -124,7 +208,7 @@ export default function Dashboard() {
               value={desde}
               max={hasta}
               onChange={(e) => setDesde(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              className="rounded-lg border border-transparent bg-[#F6F6F6] px-2.5 py-1.5 text-xs text-slate-700 focus:border-[#009DE0]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
             />
             <span className="text-xs text-slate-400">a</span>
             <input
@@ -132,7 +216,7 @@ export default function Dashboard() {
               value={hasta}
               min={desde}
               onChange={(e) => setHasta(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              className="rounded-lg border border-transparent bg-[#F6F6F6] px-2.5 py-1.5 text-xs text-slate-700 focus:border-[#009DE0]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
             />
           </span>
         )}
@@ -140,11 +224,126 @@ export default function Dashboard() {
 
       {/* Métricas */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Receipt} tone="emerald" label={`Recaudación ${periodo}`} value={money(stats.total)} sub={`${stats.vF.length} ventas`} style={{ animationDelay: '0ms' }} />
-        <StatCard icon={TrendingUp} tone="emerald" label="Ganancia neta estimada" value={money(stats.ganancia)} sub="Venta − costo" style={{ animationDelay: '60ms' }} />
+        <StatCard icon={Receipt} tone="brand" label={`Recaudación ${periodo}`} value={money(stats.total)} sub={`${stats.vF.length} ventas`} style={{ animationDelay: '0ms' }} />
+        <StatCard icon={TrendingUp} tone="brand" label="Ganancia neta estimada" value={money(stats.ganancia)} sub="Venta − costo" style={{ animationDelay: '60ms' }} />
         <StatCard icon={HandCoins} tone="amber" label="Capital en fiados" value={money(stats.capitalFiados)} sub="Deuda pendiente total" style={{ animationDelay: '120ms' }} />
         <StatCard icon={TriangleAlert} tone="rose" label="Productos bajo mínimo" value={stats.criticos} sub="Requieren reposición" style={{ animationDelay: '180ms' }} />
       </div>
+
+      {/* ===== Motor de Recomendaciones & Ciencia de Datos ===== */}
+      <section className="overflow-hidden rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 via-white to-violet-50 shadow-sm">
+        <header className="flex items-center gap-3 border-b border-indigo-100 px-5 py-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm">
+            <Sparkles size={19} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">Motor de Recomendaciones & Ciencia de Datos</h3>
+            <p className="text-xs text-slate-500">
+              Calculado sobre {reco.tickets} ticket(s) del historial completo y el stock vigente
+            </p>
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 gap-4 p-5 lg:grid-cols-3">
+          {/* Reglas de asociación / market basket */}
+          <div className="flex flex-col gap-3 rounded-xl border border-indigo-100 bg-white p-4">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-indigo-500">
+              <Percent size={13} /> Sugerencia de combos
+            </p>
+            {reco.combos.length === 0 ? (
+              <p className="py-4 text-center text-xs text-slate-400">
+                Aún no hay pares de productos que se repitan juntos en los tickets.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {reco.combos.map((c) => (
+                  <li key={`${c.a}-${c.b}`} className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5">
+                    <p className="text-[13px] font-semibold leading-snug text-slate-800">
+                      {c.pa.nombre} <span className="font-normal text-indigo-400">+</span> {c.pb.nombre}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Se compraron juntos <b>{c.veces}</b> {c.veces === 1 ? 'vez' : 'veces'}
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium text-indigo-700">
+                      Combo sugerido: <b>{money(c.precioCombo)}</b>
+                      <span className="font-normal text-slate-400"> (separados {money(c.separados)})</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-auto text-[11px] leading-snug text-slate-400">
+              Market basket: pares que comparten ticket con mayor frecuencia, con precio promocional (~10% off).
+            </p>
+          </div>
+
+          {/* Baja rotación: liquidación / promo */}
+          <div className="flex flex-col gap-3 rounded-xl border border-amber-100 bg-white p-4">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-amber-600">
+              <PackageX size={13} /> Baja rotación · Liquidación
+            </p>
+            {reco.rotacion.length === 0 ? (
+              <p className="py-4 text-center text-xs text-slate-400">
+                Sin productos estancados: todo el stock rota correctamente.
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2.5">
+                {reco.rotacion.map(({ p, vendidasU, inmovilizado }) => (
+                  <li key={p.id} className="rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2.5">
+                    <p className="text-[13px] font-semibold leading-snug text-slate-800">{p.nombre}</p>
+                    <p className="mt-0.5 text-[11px] text-slate-500">
+                      Stock <b>{p.stock} u.</b> · {vendidasU === 0 ? 'sin ventas registradas' : `solo ${vendidasU} u. vendida(s)`}
+                      {' '}· inmovilizado {money(inmovilizado)}
+                    </p>
+                    <p className="mt-1 text-[11px] font-medium text-amber-700">
+                      Recomendación: aplicar descuento o promo 2x1.
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-auto text-[11px] leading-snug text-slate-400">
+              Stock alto con ventas casi nulas: conviene liberar el capital inmovilizado.
+            </p>
+          </div>
+
+          {/* Estrellas & reposición crítica */}
+          <div className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-white p-4">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-brand">
+              <Star size={13} /> Estrellas & reposición
+            </p>
+            {reco.estrellas.length > 0 ? (
+              <ul className="flex flex-col gap-1.5">
+                {reco.estrellas.map(({ p, cant, margen }, i) => (
+                  <li key={p.id} className="flex items-center gap-2 text-[13px]">
+                    <Star size={13} className={i === 0 ? 'fill-amber-300 text-amber-400' : 'text-slate-300'} />
+                    <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{p.nombre}</span>
+                    <span className="text-[11px] text-slate-400">{cant} u. · {money(margen)} margen</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-slate-400">Todavía no hay ventas para destacar estrellas.</p>
+            )}
+            {reco.reposicion.length > 0 && (
+              <div className="flex flex-col gap-1.5 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-2.5">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-rose-500">
+                  <RefreshCw size={12} /> Reponer urgente
+                </p>
+                {reco.reposicion.map(({ p }) => (
+                  <p key={p.id} className="flex items-center justify-between gap-2 text-xs text-slate-600">
+                    <span className="min-w-0 truncate">{p.nombre}</span>
+                    <span className="shrink-0 font-semibold text-rose-600">stock {p.stock}/{p.stockMin}</span>
+                  </p>
+                ))}
+              </div>
+            )}
+            <p className="mt-auto text-[11px] leading-snug text-slate-400">
+              Líderes de margen/volumen y faltantes por debajo del mínimo de stock.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Top 3 */}
@@ -164,7 +363,7 @@ export default function Dashboard() {
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+                      className="h-full rounded-full bg-gradient-to-r from-brand to-blue-400 transition-all duration-500"
                       style={{ width: `${(t.cant / maxTop) * 100}%` }}
                     />
                   </div>

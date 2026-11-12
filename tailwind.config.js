@@ -4,11 +4,24 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'Segoe UI', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'system-ui', 'Segoe UI', 'sans-serif'],
         mono: ['ui-monospace', 'Consolas', 'monospace'],
       },
+      colors: {
+        // Marca Yapa: Celeste Wolt sobre superficies suaves (sin bordes duros).
+        brand: {
+          DEFAULT: '#009DE0',
+          dark: '#0086C0',
+          deep: '#0066B2',
+          soft: '#EBF7FD',
+          softtext: '#007AB8',
+        },
+        ink: '#202125',
+        surface: '#F6F6F6',
+      },
       boxShadow: {
-        soft: '0 4px 20px -4px rgb(15 23 42 / 0.08)',
+        soft: '0 8px 28px rgba(0,0,0,0.06)',
+        lift: '0 12px 32px -8px rgba(0,0,0,0.12)',
       },
     },
   },

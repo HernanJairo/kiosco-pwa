@@ -54,7 +54,7 @@ function FilaStock({ p }) {
           onBlur={guardarPrecio}
           onKeyDown={(e) => e.key === 'Enter' && e.target.blur()}
           inputMode="numeric"
-          className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-emerald-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-semibold text-brand focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
         />
       </div>
     </div>
@@ -78,7 +78,7 @@ export default function StockRapido() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar producto…"
-          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
+          className="w-full rounded-lg border border-transparent bg-[#F6F6F6] py-2 pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
         />
       </div>
       {list.length === 0 ? (

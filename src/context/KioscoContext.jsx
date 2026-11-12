@@ -4,6 +4,7 @@ import { buildSeed, CATEGORIAS } from './seedData'
 import { firebaseLista } from '../firebase/firebaseConfig'
 import * as fs from '../firebase/firestoreService'
 import * as ops from './operaciones'
+import { clientePorIdentificador } from '../utils/acceso'
 import { money } from '../utils/format'
 
 const DB_KEY = 'kiosco_db_v2'
@@ -34,9 +35,27 @@ function loadDB() {
       // Rellena campos nuevos de config (whatsapp, aliasPago...) en bases viejas
       parsed.config = { ...seed.config, ...(parsed.config || {}) }
       if (!Array.isArray(parsed.clientes)) parsed.clientes = seed.clientes
-      if (!Array.isArray(parsed.staff)) parsed.staff = seed.staff
+      // Migración staff → personal: la colección vieja (usuario+clave)
+      // se traduce a la nueva estructura (pin 4 dígitos, activo, foto).
+      if (!Array.isArray(parsed.personal)) {
+        parsed.personal =
+          Array.isArray(parsed.staff) && parsed.staff.length
+            ? parsed.staff.map((s) => ({
+                id: s.id,
+                usuario: s.usuario,
+                nombre: s.nombre,
+                apellido: s.apellido || '',
+                rol: s.rol === 'admin' ? 'admin' : 'vendedor',
+                pin: /^\d{4}$/.test(String(s.pin ?? s.clave ?? '')) ? String(s.pin ?? s.clave) : '1234',
+                avatarUrl: s.avatarUrl || '',
+                activo: s.activo !== false,
+              }))
+            : seed.personal
+      }
       if (!Array.isArray(parsed.solicitudes)) parsed.solicitudes = []
       if (!Array.isArray(parsed.notificaciones)) parsed.notificaciones = []
+      if (!Array.isArray(parsed.encargos)) parsed.encargos = []
+      if (!Array.isArray(parsed.auditoria)) parsed.auditoria = []
       return parsed
     }
   } catch {
@@ -118,24 +137,25 @@ export function KioscoProvider({ children }) {
   const avisarCliente = (n, cliente, texto, tipo) => avisar(n, `cliente:${cliente.id}`, texto, tipo)
 
   /* ================= AUTH ================= */
-  const loginCliente = async (dni, pin) => {
+  // El cliente entra con DNI o correo electrónico (y también funciona el
+  // teléfono) + PIN de 4 dígitos. La resolución del identificador vive en
+  // utils/acceso.js para compartirla con el recupero de PIN.
+  const loginCliente = async (ident, pin) => {
     await sleep()
-    const c = db.clientes.find(
-      (x) => x.dni === String(dni).trim() && x.pin === String(pin).trim()
-    )
-    if (!c) throw new Error('DNI o PIN incorrectos.')
+    const c = clientePorIdentificador(db.clientes, ident)
+    if (!c || c.pin !== String(pin).trim()) {
+      throw new Error('DNI/correo o PIN incorrectos.')
+    }
     const s = { rol: 'cliente', id: c.id, nombre: `${c.nombre} ${c.apellido}` }
     setSession(s)
     return s
   }
 
-  const loginStaff = async (usuario, clave) => {
+  // Acceso del mostrador: usuario (DNI o username) + PIN de 4 dígitos.
+  const loginStaff = async (usuario, pin) => {
     await sleep()
-    const u = db.staff.find(
-      (x) => x.usuario === String(usuario).trim().toLowerCase() && x.clave === String(clave)
-    )
-    if (!u) throw new Error('Usuario o contraseña incorrectos.')
-    const s = { rol: u.rol, id: u.id, nombre: u.nombre }
+    const u = ops.autenticarPersonal(db, { usuario, pin })
+    const s = { rol: u.rol, id: u.id, nombre: `${u.nombre} ${u.apellido}`.trim() }
     setSession(s)
     return s
   }
@@ -174,10 +194,10 @@ export function KioscoProvider({ children }) {
   /* ================= VENTAS / POS ================= */
   // Venta libre por defecto: efectivo y transferencia no exigen cliente.
   // Solo "cuenta corriente / fiado" requiere cliente con saldo o límite.
-  const registrarVenta = async ({ items, metodo, clienteId = null, vendedor = 'mostrador', excepcionFiado = false, enEspera = false }) => {
+  const registrarVenta = async ({ items, metodo, clienteId = null, vendedor = 'mostrador', excepcionFiado = false, enEspera = false, retiradoPor = null, reservado = false }) => {
     await sleep(220)
     if (!db.config.abierto) throw new Error('Kiosco cerrado: no se pueden registrar ventas.')
-    const { detalle, total, cliente } = ops.validarVenta(db, { items, metodo, clienteId, excepcionFiado })
+    const { detalle, total, cliente } = ops.validarVenta(db, { items, metodo, clienteId, excepcionFiado, omitirStock: reservado })
 
     const venta = {
       id: uid(),
@@ -192,10 +212,13 @@ export function KioscoProvider({ children }) {
       // 'completada' por defecto; 'en_espera_transferencia' cuando el
       // mostrador guarda el ticket aguardando que impacte el pago.
       estado: enEspera ? 'en_espera_transferencia' : 'completada',
+      // Quién retiró físicamente la bolsa cuando la venta cierra un
+      // encargo (titular o tercero autorizado): queda en el movimiento.
+      retiradoPor: retiradoPor || null,
     }
 
     mutate((n) => {
-      ops.aplicarVentaDb(n, { venta, detalle, metodo, clienteId: cliente?.id })
+      ops.aplicarVentaDb(n, { venta, detalle, metodo, clienteId: cliente?.id, descontarStock: !reservado })
       if (cliente && metodo === 'fiado') {
         const c = n.clientes.find((x) => x.id === cliente.id)
         avisarCliente(
@@ -246,9 +269,9 @@ export function KioscoProvider({ children }) {
   /* ================= CLIENTES ================= */
   // Alta de cliente: sirve para el alta administrativa del mostrador y
   // para el auto-registro público. El DNI es único en todo el sistema.
-  const crearCliente = async ({ nombre, apellido, dni, telefono = '', pin, limiteFiado = 0 }) => {
+  const crearCliente = async ({ nombre, apellido, dni, telefono = '', email = '', pin, limiteFiado = 0 }) => {
     await sleep()
-    const datos = { nombre, apellido, dni, telefono, pin, limiteFiado }
+    const datos = { nombre, apellido, dni, telefono, email, pin, limiteFiado }
     ops.validarAltaCliente(db.clientes, datos)
     const cliente = ops.nuevoCliente(datos)
     mutate((n) => {
@@ -433,43 +456,169 @@ export function KioscoProvider({ children }) {
     if (s) sync(fs.upsertSolicitud({ ...s, estado: 'descartada' }))
   }
 
-  /* ================= STAFF / VENDEDORES ================= */
-  const addVendedor = async ({ nombre, usuario, clave }) => {
+  /* ================= PERSONAL / EQUIPO ================= */
+  // Alta de integrante (admin o vendedor) desde "Equipo y Permisos".
+  const addPersonal = async (datos) => {
     await sleep()
-    const user = String(usuario).trim().toLowerCase()
-    if (!nombre?.trim()) throw new Error('Ingresá el nombre del vendedor.')
-    if (!user) throw new Error('Ingresá un nombre de usuario.')
-    if (!String(clave).trim()) throw new Error('Ingresá una contraseña.')
-    if (db.staff.some((s) => s.usuario === user)) throw new Error('Ese usuario ya existe.')
-    const u = { id: uid(), usuario: user, clave: String(clave), nombre: nombre.trim(), rol: 'vendedor' }
-    mutate((n) => n.staff.push(u))
+    ops.validarAltaPersonal(db.personal, datos)
+    const u = ops.nuevoPersonal(datos)
+    mutate((n) => {
+      ops.validarAltaPersonal(n.personal, datos) // revalida sobre el borrador
+      n.personal.push(u)
+    })
     return u
   }
 
-  const deleteVendedor = async (id) => {
-    await sleep()
+  // Edición administrativa: datos, rol, estado activo, restablecer PIN.
+  // Si el que se edita es el usuario logueado, su nombre visible se
+  // refresca en la sesión.
+  const updatePersonal = async (id, patch) => {
+    await sleep(90)
+    let actualizado
     mutate((n) => {
-      n.staff = n.staff.filter((s) => !(s.id === id && s.rol === 'vendedor'))
+      actualizado = ops.actualizarPersonalDb(n, id, patch)
     })
+    if (session?.id === id && session?.rol !== 'cliente' && actualizado) {
+      setSession((s) => ({ ...s, nombre: `${actualizado.nombre} ${actualizado.apellido}`.trim(), rol: actualizado.rol }))
+    }
+    return actualizado
   }
 
-  // El staff actualiza su propia clave de acceso ("Mi clave" en Config).
-  const updateStaffClave = async (staffId, clave) => {
+  const eliminarPersonal = async (id) => {
+    await sleep()
+    ops.eliminarPersonalDb(clone(db), id) // valida antes de mutar (último admin)
+    mutate((n) => ops.eliminarPersonalDb(n, id))
+  }
+
+  // Cambio de PIN propio desde "Mi Perfil": exige el PIN vigente.
+  const cambiarPinPersonal = async (id, pinActual, pinNuevo) => {
     await sleep(90)
-    const c = String(clave ?? '').trim()
-    if (c.length < 4) throw new Error('La clave debe tener al menos 4 caracteres.')
+    mutate((n) => ops.cambiarPinPersonalDb(n, id, pinActual, pinNuevo))
+  }
+
+  /* ================= ENCARGOS (retiro en local) =================
+     El cliente logueado envía su carrito "para armar" sin pagar aún.
+     El staff lo prepara, lo marca listo y el cliente lo retira en caja
+     mostrando su QR; el cobro se registra como venta normal. */
+  const enviarEncargo = async (items, retiroTercero = null) => {
+    await sleep(120)
+    if (!clienteSesion) throw new Error('Tenés que iniciar sesión para encargar.')
+    if (!config.recibiendoEncargos) throw new Error('El kiosco no está recibiendo encargos ahora.')
+    let creado = null
     mutate((n) => {
-      const s = n.staff.find((x) => x.id === staffId)
-      if (s) s.clave = c
+      creado = ops.nuevoEncargo(n, { clienteId: clienteSesion.id, items, retiroTercero })
+      avisar(
+        n,
+        'staff',
+        `Nuevo encargo de ${creado.clienteNombre} · ${creado.items.reduce((s, i) => s + i.cantidad, 0)} ítem(s) · ${money(creado.total)}.`,
+        'encargo'
+      )
     })
+    return creado
+  }
+
+  // Ajuste por faltante de góndola ("caso 999"): vendedor y admin pueden
+  // quitar ítems del pedido; el stock reservado vuelve a la góndola.
+  const ajustarItemEncargo = async (encargoId, productoId, cantidadQuitar) => {
+    await sleep(60)
+    let e = null
+    mutate((n) => {
+      e = ops.ajustarItemEncargoDb(n, encargoId, productoId, cantidadQuitar, { ajustadoPor: session?.nombre })
+    })
+    return e
+  }
+
+  const guardarTerceroEncargo = async (encargoId, datos) => {
+    await sleep(60)
+    let e = null
+    mutate((n) => {
+      e = ops.guardarTerceroEncargoDb(n, encargoId, datos)
+    })
+    return e
+  }
+
+  const marcarEncargoListo = async (encargoId) => {
+    await sleep(90)
+    let e = null
+    mutate((n) => {
+      e = ops.marcarEncargoListoDb(n, encargoId, { preparadoPor: session?.nombre || 'mostrador' })
+      const cliente = n.clientes.find((c) => c.id === e.clienteId)
+      if (cliente) {
+        const falt = (e.itemsFaltantes || []).map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')
+        avisarCliente(
+          n,
+          cliente,
+          `¡Tu pedido #${e.id.slice(0, 8).toUpperCase()} está listo para retirar en caja! Total a pagar ${money(e.total)}.` +
+            (falt ? ` Sin stock en góndola se descontó: ${falt}.` : ''),
+          'encargo'
+        )
+      }
+    })
+    return e
+  }
+
+  // El mostrador lo cierra al cobrar el pedido (venta normal asociada).
+  const entregarEncargo = async (encargoId, retiradoPor = null) => {
+    await sleep(60)
+    let e = null
+    mutate((n) => {
+      e = ops.entregarEncargoDb(n, encargoId, { retiradoPor })
+      const cliente = n.clientes.find((c) => c.id === e.clienteId)
+      if (cliente) {
+        avisarCliente(
+          n,
+          cliente,
+          `Retiraste tu pedido #${e.id.slice(0, 8).toUpperCase()}. ¡Gracias por elegir ${n.config.nombreKiosco}!`,
+          'encargo'
+        )
+      }
+    })
+    return e
+  }
+
+  const cancelarEncargo = async (encargoId) => {
+    await sleep(60)
+    let e = null
+    mutate((n) => {
+      e = ops.cancelarEncargoDb(n, encargoId)
+      const cliente = n.clientes.find((c) => c.id === e.clienteId)
+      if (cliente) {
+        avisarCliente(
+          n,
+          cliente,
+          `Tu encargo #${e.id.slice(0, 8).toUpperCase()} fue cancelado por el kiosco.`,
+          'encargo'
+        )
+      }
+    })
+    return e
   }
 
   /* ================= CONFIG ================= */
   const updateConfig = async (patch) => {
     await sleep()
     const abre = patch?.abierto === true && !db.config.abierto
+    // Cambios auditables: cada toggle de estado operativo deja registro
+    // con autor/rol/hora y le avisa a la administración.
+    const auditables = [
+      ['abierto', 'Local abierto', 'Local cerrado'],
+      ['recibiendoEncargos', 'Encargos habilitados', 'Encargos pausados'],
+    ]
     mutate((n) => {
       Object.assign(n.config, patch)
+      for (const [clave, onTxt, offTxt] of auditables) {
+        if (patch?.[clave] === undefined || patch[clave] === db.config[clave]) continue
+        const texto = patch[clave] ? onTxt : offTxt
+        ops.registrarAuditoriaDb(n, {
+          autor: session?.nombre || 'mostrador',
+          rol: session?.rol || 'sistema',
+          accion: `ESTADO_${clave.toUpperCase()}`,
+          detalle: `${texto} · ${n.config.nombreKiosco}`,
+        })
+        // La administración y el mostrador se enteran por la campanita.
+        avisar(n, 'admin', `${texto}: ${session?.nombre || 'mostrador'} (${session?.rol || '?'}) lo cambió.`, 'auditoria')
+        avisar(n, 'staff', `${texto} — por ${session?.nombre || 'mostrador'}.`, 'auditoria')
+      }
       // Apertura de caja: el mostrador se entera por la campanita.
       if (abre) avisar(n, 'staff', 'Apertura de caja: el kiosco habilitó el mostrador.', 'apertura')
     })
@@ -497,10 +646,12 @@ export function KioscoProvider({ children }) {
     config: db.config,
     productos: db.productos,
     clientes: db.clientes,
-    staff: db.staff,
+    personal: db.personal,
     ventas: db.ventas,
     solicitudes: db.solicitudes,
     solicitudesPendientes,
+    encargos: db.encargos || [],
+    auditoria: db.auditoria || [],
     notificaciones: db.notificaciones || [],
     session,
     clienteSesion,
@@ -526,9 +677,16 @@ export function KioscoProvider({ children }) {
     aprobarSolicitud,
     descartarSolicitud,
     persistencia: { modo: remoto ? 'firebase' : 'local', remoto, useFirebase: USE_FIREBASE },
-    addVendedor,
-    deleteVendedor,
-    updateStaffClave,
+    enviarEncargo,
+    ajustarItemEncargo,
+    guardarTerceroEncargo,
+    marcarEncargoListo,
+    entregarEncargo,
+    cancelarEncargo,
+    addPersonal,
+    updatePersonal,
+    eliminarPersonal,
+    cambiarPinPersonal,
     updateConfig,
     resetDemo,
   }

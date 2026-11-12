@@ -1,5 +1,9 @@
 export const CATEGORIAS = ['Bebidas', 'Snacks', 'Galletitas', 'Almuerzos', 'Útiles']
 
+// Fotos reales de producto (Unsplash, optimizadas a 400px). Si alguna
+// falla al cargar, ProductoImg muestra el ícono de la categoría.
+const img = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=400&q=80`
+
 const d = (n) => {
   const t = new Date()
   t.setDate(t.getDate() + n)
@@ -23,30 +27,32 @@ export function buildSeed() {
       nombreKiosco: 'Kiosco Los Pinos',
       direccion: 'Av. Rivadavia 1234 · Local 2',
       contacto: 'kioscolospinos@gmail.com · 388 555-0123',
+      emailKiosco: 'kioscolospinos@gmail.com',
       horario: 'Lun a Sáb · 8:00 a 20:00',
       whatsapp: '+5493881234567',
       aliasPago: 'KIOSCO.LOSPINOS.MP',
       cbuPago: '0000003100012345678901',
       limiteFiadoGlobal: 10000,
       abierto: true,
+      recibiendoEncargos: true,
     },
 
     productos: [
-      { id: 'p1', nombre: 'Agua mineral 500 ml', categoria: 'Bebidas', costo: 400, precio: 700, stock: 24, stockMin: 6, vencimiento: d(120), codigos: ['7790895000997', '7790895001000'] },
-      { id: 'p2', nombre: 'Gaseosa cola 354 ml', categoria: 'Bebidas', costo: 500, precio: 900, stock: 18, stockMin: 6, vencimiento: d(90), codigos: ['7791813420015'] },
-      { id: 'p3', nombre: 'Jugo en caja naranja', categoria: 'Bebidas', costo: 250, precio: 450, stock: 3, stockMin: 8, vencimiento: d(15) },
-      { id: 'p4', nombre: 'Papas fritas clásicas', categoria: 'Snacks', costo: 600, precio: 1100, stock: 15, stockMin: 5, vencimiento: d(40), codigos: ['7790310655620'] },
-      { id: 'p5', nombre: 'Nachos con queso', categoria: 'Snacks', costo: 700, precio: 1200, stock: 10, stockMin: 5, vencimiento: d(5) },
-      { id: 'p6', nombre: 'Barrita de cereal', categoria: 'Snacks', costo: 350, precio: 600, stock: 20, stockMin: 6, vencimiento: d(30) },
-      { id: 'p7', nombre: 'Galletitas con chispas', categoria: 'Galletitas', costo: 450, precio: 800, stock: 12, stockMin: 5, vencimiento: d(25) },
-      { id: 'p8', nombre: 'Galletitas de avena', categoria: 'Galletitas', costo: 400, precio: 700, stock: 8, stockMin: 5, vencimiento: d(-2) },
-      { id: 'p9', nombre: 'Alfajor triple', categoria: 'Galletitas', costo: 300, precio: 550, stock: 30, stockMin: 8, vencimiento: d(60), codigos: ['7790040114505'] },
-      { id: 'p10', nombre: 'Sándwich jamón y queso', categoria: 'Almuerzos', costo: 900, precio: 1600, stock: 6, stockMin: 4, vencimiento: d(1) },
-      { id: 'p11', nombre: 'Empanada de pollo', categoria: 'Almuerzos', costo: 800, precio: 1500, stock: 9, stockMin: 4, vencimiento: d(2) },
-      { id: 'p12', nombre: 'Ensalada de frutas', categoria: 'Almuerzos', costo: 1000, precio: 1800, stock: 4, stockMin: 3, vencimiento: d(0) },
-      { id: 'p13', nombre: 'Cuaderno rayado A5', categoria: 'Útiles', costo: 1500, precio: 2400, stock: 14, stockMin: 5, vencimiento: null },
-      { id: 'p14', nombre: 'Lapicera tinta azul', categoria: 'Útiles', costo: 200, precio: 400, stock: 40, stockMin: 10, vencimiento: null },
-      { id: 'p15', nombre: 'Regla plástica 30 cm', categoria: 'Útiles', costo: 350, precio: 600, stock: 5, stockMin: 10, vencimiento: null },
+      { id: 'p1', nombre: 'Agua mineral 500 ml', descripcion: 'Botella sin gas, fresca', categoria: 'Bebidas', costo: 400, precio: 700, stock: 24, stockMin: 6, vencimiento: d(120), codigos: ['7790895000997', '7790895001000'], foto: img('photo-1523362628745-0c100150b504') },
+      { id: 'p2', nombre: 'Gaseosa cola 354 ml', descripcion: 'Botella descartable bien fría', categoria: 'Bebidas', costo: 500, precio: 900, stock: 18, stockMin: 6, vencimiento: d(90), codigos: ['7791813420015'], foto: img('photo-1554866585-cd94860890b7') },
+      { id: 'p3', nombre: 'Jugo en caja naranja', descripcion: 'Pack individual 200 ml', categoria: 'Bebidas', costo: 250, precio: 450, stock: 3, stockMin: 8, vencimiento: d(15), foto: img('photo-1556679343-c7306c1976bc') },
+      { id: 'p4', nombre: 'Papas fritas clásicas', descripcion: 'Bolsa grande, corte tradicional', categoria: 'Snacks', costo: 600, precio: 1100, stock: 15, stockMin: 5, vencimiento: d(40), codigos: ['7790310655620'], foto: img('photo-1566478989037-eec170784d0b') },
+      { id: 'p5', nombre: 'Nachos con queso', descripcion: 'Con cheddar derretido', categoria: 'Snacks', costo: 700, precio: 1200, stock: 10, stockMin: 5, vencimiento: d(5), foto: img('photo-1613919113640-25732ec5e61f') },
+      { id: 'p6', nombre: 'Barrita de cereal', descripcion: 'Avena y miel, snack liviano', categoria: 'Snacks', costo: 350, precio: 600, stock: 20, stockMin: 6, vencimiento: d(30), foto: img('photo-1621939514649-280e2ee25f60') },
+      { id: 'p7', nombre: 'Galletitas con chispas', descripcion: 'Paquete de cookies con chips', categoria: 'Galletitas', costo: 450, precio: 800, stock: 12, stockMin: 5, vencimiento: d(25), foto: img('photo-1499636136210-6f4ee915583e') },
+      { id: 'p8', nombre: 'Galletitas de avena', descripcion: 'Pack x6, caseras', categoria: 'Galletitas', costo: 400, precio: 700, stock: 8, stockMin: 5, vencimiento: d(-2), foto: img('photo-1558961363-fa8fdf82db35') },
+      { id: 'p9', nombre: 'Alfajor triple', descripcion: 'Chocolate y dulce de leche', categoria: 'Galletitas', costo: 300, precio: 550, stock: 30, stockMin: 8, vencimiento: d(60), codigos: ['7790040114505'], foto: img('photo-1549007994-cb92caebd54b') },
+      { id: 'p10', nombre: 'Sándwich jamón y queso', descripcion: 'Pan lactal, fresco del día', categoria: 'Almuerzos', costo: 900, precio: 1600, stock: 6, stockMin: 4, vencimiento: d(1), foto: img('photo-1528735602780-2552fd46c7af') },
+      { id: 'p11', nombre: 'Empanada de pollo', descripcion: 'Al horno, jugosa', categoria: 'Almuerzos', costo: 800, precio: 1500, stock: 9, stockMin: 4, vencimiento: d(2), foto: img('photo-1601050690597-df0568f70950') },
+      { id: 'p12', nombre: 'Ensalada de frutas', descripcion: 'Vaso con fruta de estación', categoria: 'Almuerzos', costo: 1000, precio: 1800, stock: 4, stockMin: 3, vencimiento: d(0), foto: img('photo-1490474418585-ba9bad8fd0ea') },
+      { id: 'p13', nombre: 'Cuaderno rayado A5', descripcion: 'Tapa blanda, 80 hojas', categoria: 'Útiles', costo: 1500, precio: 2400, stock: 14, stockMin: 5, vencimiento: null, foto: img('photo-1531346878377-a5be20888e57') },
+      { id: 'p14', nombre: 'Lapicera tinta azul', descripcion: 'Trazo fino, escritura suave', categoria: 'Útiles', costo: 200, precio: 400, stock: 40, stockMin: 10, vencimiento: null, foto: img('photo-1585336261022-680e295ce3fe') },
+      { id: 'p15', nombre: 'Regla plástica 30 cm', descripcion: 'Transparente, borde metálico', categoria: 'Útiles', costo: 350, precio: 600, stock: 5, stockMin: 10, vencimiento: null, foto: img('photo-1452860606245-08befc0ff44b') },
     ],
 
     // Clientes registrados: el DNI es el identificador único de acceso.
@@ -60,6 +66,7 @@ export function buildSeed() {
         dni: '45111222',
         pin: '1234',
         telefono: '5493885551001',
+        email: 'maria.gonzalez@correo.com',
         saldo: 2500,
         deuda: 4000,
         limiteFiado: 0,
@@ -104,6 +111,7 @@ export function buildSeed() {
         dni: '46333444',
         pin: '4321',
         telefono: '5493885551002',
+        email: '',
         saldo: 800,
         deuda: 1200,
         limiteFiado: 5000,
@@ -132,6 +140,7 @@ export function buildSeed() {
         dni: '47555666',
         pin: '1111',
         telefono: '5493885551003',
+        email: 'sofia.ramirez@correo.com',
         saldo: 0,
         deuda: 0,
         limiteFiado: 0,
@@ -148,6 +157,7 @@ export function buildSeed() {
         dni: '48222111',
         pin: '2222',
         telefono: '',
+        email: '',
         saldo: 5000,
         deuda: 4500,
         limiteFiado: 8000,
@@ -192,6 +202,7 @@ export function buildSeed() {
         dni: '49101010',
         pin: '1010',
         telefono: '5493885551005',
+        email: '',
         saldo: 1200,
         deuda: 600,
         limiteFiado: 0,
@@ -214,9 +225,12 @@ export function buildSeed() {
       },
     ],
 
-    staff: [
-      { id: 's1', usuario: 'admin', clave: '1234', nombre: 'Dueña · Administración', rol: 'admin' },
-      { id: 's2', usuario: 'vendedor', clave: '1234', nombre: 'Marcos · Mostrador', rol: 'vendedor' },
+    // Equipo del comercio (admins y vendedores): usuario = DNI o
+    // username único · pin = 4 dígitos · avatarUrl = foto opcional
+    // · activo = acceso habilitado.
+    personal: [
+      { id: 's1', usuario: 'admin', nombre: 'Dueña', apellido: 'Administración', rol: 'admin', pin: '1234', avatarUrl: '', activo: true, puesto: 'Administración' },
+      { id: 's2', usuario: 'vendedor', nombre: 'Marcos', apellido: 'Mostrador', rol: 'vendedor', pin: '1234', avatarUrl: '', activo: true, puesto: 'Mostrador' },
     ],
 
     // Bandeja de solicitudes del mostrador (campana del staff):
@@ -225,6 +239,8 @@ export function buildSeed() {
     // {id, tipo, clienteId, nombre, monto?, tipoOperacion?, origen?, fechaHora, estado}
     // estado: 'pendiente' | 'aprobada' | 'descartada'
     solicitudes: [],
+    encargos: [],
+    auditoria: [],
 
     // Feed del centro de notificaciones (campanita del TopBar):
     // {id, fecha, para: 'staff' | 'cliente:<id>', texto, tipo}.

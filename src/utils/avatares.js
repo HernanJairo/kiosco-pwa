@@ -1,22 +1,38 @@
 // Avatares predefinidos para personalizar el perfil del cliente sin usar
 // fotos reales (privacidad). `cliente.avatar` guarda la clave `k`.
+// Los íconos son vectoriales (lucide-react), nunca emojis.
+import {
+  Cat,
+  Gamepad2,
+  Glasses,
+  HardHat,
+  Headphones,
+  Pizza,
+  Rocket,
+  Sparkles,
+  Star,
+  Turtle,
+  Volleyball,
+  Zap,
+} from 'lucide-react'
+
 export const AVATARES = [
-  { k: 'gorra', emoji: '🧢', nombre: 'Gorra' },
-  { k: 'lentes', emoji: '🤓', nombre: 'Lentes' },
-  { k: 'cohete', emoji: '🚀', nombre: 'Cohete' },
-  { k: 'pelota', emoji: '⚽', nombre: 'Pelota' },
-  { k: 'gamer', emoji: '🎮', nombre: 'Gamer' },
-  { k: 'gato', emoji: '🐱', nombre: 'Michi' },
-  { k: 'unicornio', emoji: '🦄', nombre: 'Unicornio' },
-  { k: 'pizza', emoji: '🍕', nombre: 'Pizza' },
-  { k: 'musica', emoji: '🎧', nombre: 'Música' },
-  { k: 'rayo', emoji: '⚡', nombre: 'Rayo' },
-  { k: 'estrella', emoji: '🌟', nombre: 'Estrella' },
-  { k: 'rana', emoji: '🐸', nombre: 'Rana' },
+  { k: 'gorra', icon: HardHat, nombre: 'Gorra' },
+  { k: 'lentes', icon: Glasses, nombre: 'Lentes' },
+  { k: 'cohete', icon: Rocket, nombre: 'Cohete' },
+  { k: 'pelota', icon: Volleyball, nombre: 'Pelota' },
+  { k: 'gamer', icon: Gamepad2, nombre: 'Gamer' },
+  { k: 'gato', icon: Cat, nombre: 'Michi' },
+  { k: 'unicornio', icon: Sparkles, nombre: 'Unicornio' },
+  { k: 'pizza', icon: Pizza, nombre: 'Pizza' },
+  { k: 'musica', icon: Headphones, nombre: 'Música' },
+  { k: 'rayo', icon: Zap, nombre: 'Rayo' },
+  { k: 'estrella', icon: Star, nombre: 'Estrella' },
+  { k: 'rana', icon: Turtle, nombre: 'Rana' },
 ]
 
 const FONDOS = [
-  'bg-emerald-100 text-emerald-700',
+  'bg-brand-soft text-brand',
   'bg-sky-100 text-sky-700',
   'bg-indigo-100 text-indigo-700',
   'bg-lime-100 text-lime-700',
@@ -30,13 +46,7 @@ const FONDOS = [
   'bg-teal-100 text-teal-700',
 ]
 
-export const avatarDe = (k) => {
-  const av = AVATARES.find((a) => a.k === k)
-  if (av) return av
-  // Admite un emoji guardado directamente (avatar inicial de altas nuevas).
-  if (k && /^\p{Emoji}+$/u.test(k)) return { k, emoji: k, nombre: 'Avatar' }
-  return null
-}
+export const avatarDe = (k) => AVATARES.find((a) => a.k === k) || null
 
 export const fondoAvatar = (k) => {
   const i = AVATARES.findIndex((a) => a.k === k)

@@ -9,8 +9,8 @@ import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
 import StatCard from '../../components/ui/StatCard'
 
-const METODO_TONE = { efectivo: 'emerald', transferencia: 'indigo', fiado: 'amber' }
-const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', fiado: 'Cta. Corriente' }
+const METODO_TONE = { efectivo: 'emerald', transferencia: 'indigo', saldo: 'brand', fiado: 'amber' }
+const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', saldo: 'Billetera', fiado: 'Cta. Corriente' }
 
 export default function AuditoriaVentas() {
   const { ventas, anularVenta, notify } = useKiosco()
@@ -48,7 +48,7 @@ export default function AuditoriaVentas() {
     <div className="flex flex-col gap-5">
       <StatCard
         icon={Receipt}
-        tone="emerald"
+        tone="brand"
         label={`Total listado (${list.filter((v) => !v.anulada && v.estado !== 'en_espera_transferencia').length} ventas válidas)`}
         value={money(totalListado)}
       />
@@ -59,13 +59,14 @@ export default function AuditoriaVentas() {
             { k: 'todas', label: 'Todos los métodos' },
             { k: 'efectivo', label: 'Efectivo' },
             { k: 'transferencia', label: 'Transferencia' },
+            { k: 'saldo', label: 'Billetera' },
             { k: 'fiado', label: 'Fiado' },
           ].map((f) => (
             <button
               key={f.k}
               onClick={() => setMetodo(f.k)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                metodo === f.k ? 'bg-emerald-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                metodo === f.k ? 'bg-[#009DE0] text-white' : 'bg-[#F6F6F6] text-slate-600 hover:bg-[#EBF7FD] hover:text-[#007AB8]'
               }`}
             >
               {f.label}
@@ -76,7 +77,7 @@ export default function AuditoriaVentas() {
               type="checkbox"
               checked={soloHoy}
               onChange={(e) => setSoloHoy(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
             />
             Solo de hoy
           </label>
@@ -85,25 +86,31 @@ export default function AuditoriaVentas() {
         {list.length === 0 ? (
           <EmptyState icon={Receipt} title="Sin ventas" sub="No hay transacciones para los filtros elegidos." />
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-2.5">
             {list.map((v) => (
               <li
                 key={v.id}
-                className={`flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${
-                  v.anulada ? 'border-slate-100 bg-slate-50 opacity-60' : 'border-slate-200 bg-white'
+                className={`flex flex-col gap-2.5 rounded-2xl px-4 py-3.5 ${
+                  v.anulada ? 'bg-[#F6F6F6] opacity-60' : 'bg-white shadow-soft'
                 }`}
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs font-medium text-slate-400">
-                      #{v.id.slice(0, 8).toUpperCase()} · {fmtFechaHora(v.fecha)}
-                    </p>
+                {/* Cabecera: orden/fecha + estado */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs font-medium text-slate-400">
+                    #{v.id.slice(0, 8).toUpperCase()} · {fmtFechaHora(v.fecha)}
+                  </p>
+                  <span className="ml-auto flex items-center gap-1.5">
                     {v.anulada && <Badge tone="slate">Anulada</Badge>}
                     {!v.anulada && v.estado === 'en_espera_transferencia' && (
-                      <Badge tone="amber">En espera de transferencia</Badge>
+                      <Badge tone="amber">En espera</Badge>
                     )}
-                  </div>
-                  <p className="mt-0.5 truncate text-sm text-slate-600">
+                    <Badge tone={METODO_TONE[v.metodo]}>{METODO_LABEL[v.metodo]}</Badge>
+                  </span>
+                </div>
+
+                {/* Detalle de ítems */}
+                <div className="min-w-0">
+                  <p className="text-sm leading-snug text-slate-600">
                     {v.items.map((it) => `${it.cantidad}× ${it.nombre}`).join(' · ')}
                   </p>
                   <p className="mt-0.5 text-[11px] text-slate-400">
@@ -111,13 +118,16 @@ export default function AuditoriaVentas() {
                     {v.clienteNombre ? ` · Cliente: ${v.clienteNombre}` : ''}
                   </p>
                 </div>
-                <Badge tone={METODO_TONE[v.metodo]}>{METODO_LABEL[v.metodo]}</Badge>
-                <span className={`w-20 text-right text-sm font-bold ${v.anulada ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
-                  {money(v.total)}
-                </span>
-                <Button variant="ghost" size="sm" disabled={v.anulada} onClick={() => setAnulando(v)} className="text-rose-500 hover:bg-rose-50">
-                  <Ban size={14} /> Anular
-                </Button>
+
+                {/* Pie: monto grande + acción */}
+                <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-2.5">
+                  <span className={`text-lg font-extrabold tracking-tight ${v.anulada ? 'text-slate-400 line-through' : 'text-[#202125]'}`}>
+                    {money(v.total)}
+                  </span>
+                  <Button variant="ghost" size="sm" disabled={v.anulada} onClick={() => setAnulando(v)} className="rounded-full text-rose-500 hover:bg-rose-50">
+                    <Ban size={14} /> Anular
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>

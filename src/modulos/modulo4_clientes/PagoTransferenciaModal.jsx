@@ -7,19 +7,27 @@ import Modal from '../../components/ui/Modal'
 import Button from '../../components/ui/Button'
 import Input, { Select } from '../../components/ui/Input'
 
-export default function PagoTransferenciaModal({ cliente, origen = 'kiosco', open, onClose }) {
+export default function PagoTransferenciaModal({ cliente, origen = 'kiosco', tipoInicial, open, onClose }) {
+  const titulo =
+    tipoInicial === 'deuda' ? 'Pagar deuda' : tipoInicial === 'recarga' ? 'Recargar saldo' : 'Pago / recarga'
   return (
-    <Modal open={open} onClose={onClose} title="Pago / recarga">
-      {open && cliente && <FormPago cliente={cliente} origen={origen} onClose={onClose} />}
+    <Modal open={open} onClose={onClose} title={titulo}>
+      {open && cliente && <FormPago cliente={cliente} origen={origen} tipoInicial={tipoInicial} onClose={onClose} />}
     </Modal>
   )
 }
 
 // Se remonta en cada apertura: el estado inicial siempre refleja la deuda vigente.
-function FormPago({ cliente, origen, onClose }) {
+// `tipoInicial` ('deuda' | 'recarga') fija el modo cuando la vista lo pide
+// explícito (botones separados de la billetera); si no viene se infiere.
+function FormPago({ cliente, origen, tipoInicial, onClose }) {
   const { config, registrarPago, solicitarTransferencia, notify, session, solicitudes } = useKiosco()
-  const [tipo, setTipo] = useState(cliente.deuda > 0 ? 'deuda' : 'recarga')
-  const [monto, setMonto] = useState(cliente.deuda > 0 ? String(cliente.deuda) : '')
+  const [tipo, setTipo] = useState(tipoInicial || (cliente.deuda > 0 ? 'deuda' : 'recarga'))
+  const [monto, setMonto] = useState(
+    (tipoInicial || (cliente.deuda > 0 ? 'deuda' : 'recarga')) === 'deuda' && cliente.deuda > 0
+      ? String(cliente.deuda)
+      : ''
+  )
   const [metodoPago, setMetodoPago] = useState('transferencia')
   const [waUrl, setWaUrl] = useState(null) // link de comprobante listo tras registrar
   const [copiado, setCopiado] = useState(null) // 'alias' | 'cbu'
@@ -65,7 +73,7 @@ function FormPago({ cliente, origen, onClose }) {
     enviando.current = true
     setBusy(true)
     try {
-      await solicitarTransferencia({ clienteId: cliente.id, monto: montoNum, origen, tipo })
+      await solicitarTransferencia({ clienteId: cliente.id, monto: montoNum, origen, tipoOperacion: tipo })
       const texto = textoComprobante({ monto: montoNum, nombre, dni: cliente.dni })
       setWaUrl(waLink(config.whatsapp, texto))
       notify(`Transferencia de ${money(montoNum)} informada: pendiente de acreditación.`, 'info')
@@ -105,7 +113,7 @@ function FormPago({ cliente, origen, onClose }) {
           href={waUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark"
         >
           <MessageCircle size={17} /> Abrir WhatsApp
         </a>
@@ -205,7 +213,7 @@ function FormPago({ cliente, origen, onClose }) {
           <Button
             type="submit"
             disabled={busy || montoNum <= 0 || enRevision}
-            className="w-full bg-emerald-600 text-white hover:bg-emerald-700"
+            className="w-full"
             size="lg"
           >
             <MessageCircle size={17} />{' '}

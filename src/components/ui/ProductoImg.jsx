@@ -16,8 +16,8 @@ export default function ProductoImg({ producto: p, className = '', iconSize = 18
     )
   }
   return (
-    <div className={`flex shrink-0 items-center justify-center bg-gradient-to-br from-emerald-50 via-slate-50 to-emerald-100/70 text-emerald-500 ${className}`}>
-      {createElement(iconoCategoria(p.categoria), { size: iconSize })}
+    <div className={`flex shrink-0 items-center justify-center bg-gradient-to-br from-brand-soft via-slate-50 to-blue-100/60 text-brand ${className}`}>
+      {createElement(iconoCategoria(p.categoria), { size: iconSize, strokeWidth: 2 })}
     </div>
   )
 }

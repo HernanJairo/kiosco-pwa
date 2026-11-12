@@ -11,6 +11,7 @@ import {
   MapPin,
   MessageCircle,
   Package,
+  PackageCheck,
   Phone,
   Receipt,
   Settings,
@@ -25,6 +26,7 @@ import TopBar from './components/layout/TopBar'
 import LandingHeader from './components/layout/LandingHeader'
 import RoleNav from './components/layout/RoleNav'
 import Footer from './components/layout/Footer'
+import SplashScreen from './components/SplashScreen'
 import Badge from './components/ui/Badge'
 import Modal from './components/ui/Modal'
 import CatalogoPublico from './modulos/modulo1_catalogo_auth/CatalogoPublico'
@@ -38,6 +40,8 @@ import ClientesAdmin from './modulos/modulo4_clientes/ClientesAdmin'
 import TerminalPOS from './modulos/modulo5_ventas/TerminalPOS'
 import AuditoriaVentas from './modulos/modulo5_ventas/AuditoriaVentas'
 import CobranzaClientes from './modulos/modulo5_ventas/CobranzaClientes'
+import EncargosPanel from './modulos/modulo5_ventas/EncargosPanel'
+import MisEncargos from './modulos/modulo4_clientes/MisEncargos'
 import Dashboard from './modulos/modulo6_reportes/Dashboard'
 import ConfiguracionKiosco, { PanelMiAcceso } from './modulos/admin/ConfiguracionKiosco'
 
@@ -45,16 +49,24 @@ const TABS = {
   cliente: [
     { key: 'catalogo', label: 'Catálogo', icon: Store },
     { key: 'billetera', label: 'Mi Billetera', icon: Wallet },
+    { key: 'encargos', label: 'Mis Encargos', icon: PackageCheck },
     { key: 'carnet', label: 'Mi Carnet', icon: IdCard },
   ],
   vendedor: [
     { key: 'pos', label: 'Terminal POS', icon: ShoppingCart },
     { key: 'cobranza', label: 'Cobranzas', icon: HandCoins },
+    { key: 'encargos', label: 'Encargos', icon: PackageCheck },
     { key: 'stock', label: 'Stock Rápido', icon: Boxes },
     { key: 'catalogo', label: 'Catálogo', icon: Store },
     { key: 'cuenta', label: 'Mi Cuenta', icon: KeyRound },
   ],
   admin: [
+    // Paridad total con el mostrador: el admin opera igual que el
+    // vendedor (POS, cobranzas, stock, encargos) más su gestión propia.
+    { key: 'pos', label: 'Terminal POS', icon: ShoppingCart },
+    { key: 'cobranza', label: 'Cobranzas', icon: HandCoins },
+    { key: 'encargos', label: 'Encargos', icon: PackageCheck },
+    { key: 'stock', label: 'Stock Rápido', icon: Boxes },
     { key: 'config', label: 'Configuración', icon: Settings },
     { key: 'productos', label: 'Productos', icon: Package },
     { key: 'catalogo', label: 'Catálogo', icon: Store },
@@ -66,9 +78,13 @@ const TABS = {
 }
 
 const MODULOS = {
-  cliente: { catalogo: CatalogoPublico, billetera: BilleteraCliente, carnet: CarnetCliente },
-  vendedor: { pos: TerminalPOS, cobranza: CobranzaClientes, stock: StockRapido, catalogo: CatalogoPublico, cuenta: PanelMiAcceso },
+  cliente: { catalogo: CatalogoPublico, billetera: BilleteraCliente, encargos: MisEncargos, carnet: CarnetCliente },
+  vendedor: { pos: TerminalPOS, cobranza: CobranzaClientes, encargos: EncargosPanel, stock: StockRapido, catalogo: CatalogoPublico, cuenta: PanelMiAcceso },
   admin: {
+    pos: TerminalPOS,
+    cobranza: CobranzaClientes,
+    encargos: EncargosPanel,
+    stock: StockRapido,
     config: ConfiguracionKiosco,
     productos: ProductosABM,
     catalogo: CatalogoPublico,
@@ -84,6 +100,22 @@ export default function App() {
   const [contactoOpen, setContactoOpen] = useState(false)
   const [vista, setVista] = useState('login') // 'login' | 'catalogo' (solo landing pública)
   const [tab, setTab] = useState(null)
+  const [navOpen, setNavOpen] = useState(false) // cajón lateral del menú (mobile/tablet)
+  // Splash de bienvenida: una sola vez por sesión de pestaña.
+  const [splash, setSplash] = useState(() => {
+    try {
+      return !sessionStorage.getItem('yapa_splash_ok')
+    } catch {
+      return false
+    }
+  })
+  const cerrarSplash = () => {
+    try {
+      sessionStorage.setItem('yapa_splash_ok', '1')
+    } catch { /* sin storage: simplemente no vuelve a mostrarse en esta sesión */ }
+    setSplash(false)
+  }
+  const splashEl = splash ? <SplashScreen onFin={cerrarSplash} /> : null
 
   const rol = session?.rol
   const tabs = useMemo(() => (rol ? TABS[rol] : []), [rol])
@@ -93,10 +125,21 @@ export default function App() {
     if (rol === 'cliente' && clienteSesion === null) logout()
   }, [rol, clienteSesion, logout])
 
+  // Navegación interna entre módulos (ej. "Catálogo" desde la billetera)
+  useEffect(() => {
+    const onNav = (e) => {
+      const destino = e.detail
+      if (tabs.some((t) => t.key === destino)) setTab(destino)
+    }
+    window.addEventListener('yapa:nav', onNav)
+    return () => window.removeEventListener('yapa:nav', onNav)
+  }, [tabs])
+
   /* ---------- Vista pública: bienvenida + login directo ---------- */
   if (!session) {
     return (
-      <div className="flex min-h-screen flex-col bg-slate-50">
+      <div className="flex min-h-screen flex-col overflow-x-hidden bg-white">
+        {splashEl}
         <LandingHeader
           onContact={() => setContactoOpen(true)}
           onCatalog={() => setVista('catalogo')}
@@ -106,36 +149,23 @@ export default function App() {
 
         <main className="flex-1">
           {vista === 'login' ? (
-            /* Bienvenida: login centrado, sin catálogo debajo */
-            <section className="fade-in mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 py-10">
-              <div className="text-center">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-800 sm:text-3xl">
-                  Bienvenido/a a <span className="text-emerald-600">{config.nombreKiosco}</span>
-                </h1>
-                <p className="mt-2 flex items-center justify-center gap-1.5 text-sm text-slate-400">
-                  <Clock size={14} /> {config.horario}
-                  <Badge tone={config.abierto ? 'emerald' : 'amber'} className="ml-2">
-                    {config.abierto ? 'Abierto ahora' : 'Cerrado'}
-                  </Badge>
-                </p>
-              </div>
-              <div className="w-full max-w-md">
-                <LoginPanel />
-              </div>
+            /* Bienvenida: split-login centrado, sin catálogo debajo */
+            <section className="fade-in mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-5xl flex-col items-center justify-center gap-6 px-4 py-10">
+              <LoginPanel />
             </section>
           ) : (
             /* Catálogo público: vista dedicada con regreso al login */
             <section className="fade-in mx-auto w-full max-w-7xl px-4 pb-16 pt-6">
               <button
                 onClick={() => setVista('login')}
-                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-emerald-600"
+                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand"
               >
                 <LogIn size={15} /> Volver al ingreso
               </button>
-              <div className="mb-6 flex flex-col justify-between gap-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-800 p-6 text-white shadow-md sm:flex-row sm:items-center">
+              <div className="mb-6 flex flex-col justify-between gap-3 rounded-2xl bg-gradient-to-r from-brand to-brand-dark p-6 text-white shadow-md sm:flex-row sm:items-center">
                 <div>
                   <h2 className="text-xl font-bold sm:text-2xl">Catálogo del kiosco</h2>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-100">
+                  <p className="mt-1 flex items-center gap-1.5 text-sm text-blue-200">
                     <Store size={14} /> {config.direccion}
                   </p>
                 </div>
@@ -154,24 +184,24 @@ export default function App() {
           <div className="flex flex-col gap-3 text-sm text-slate-600">
             <p className="font-semibold text-slate-800">{config.nombreKiosco}</p>
             <p className="flex items-center gap-2">
-              <MapPin size={15} className="shrink-0 text-emerald-600" /> {config.direccion}
+              <MapPin size={15} className="shrink-0 text-brand" /> {config.direccion}
             </p>
             <p className="flex items-center gap-2">
-              <Phone size={15} className="shrink-0 text-emerald-600" /> {config.contacto}
+              <Phone size={15} className="shrink-0 text-brand" /> {config.contacto}
             </p>
             <p className="flex items-center gap-2">
-              <MessageCircle size={15} className="shrink-0 text-emerald-600" />
+              <MessageCircle size={15} className="shrink-0 text-brand" />
               <a
                 href={waLink(config.whatsapp, `Hola! Consulta para ${config.nombreKiosco}.`)}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800"
+                className="font-medium text-brand underline decoration-blue-300 underline-offset-2 hover:text-brand-dark"
               >
                 WhatsApp: {config.whatsapp}
               </a>
             </p>
             <p className="flex items-center gap-2">
-              <Clock size={15} className="shrink-0 text-emerald-600" /> {config.horario}
+              <Clock size={15} className="shrink-0 text-brand" /> {config.horario}
             </p>
           </div>
         </Modal>
@@ -184,11 +214,18 @@ export default function App() {
   const Modulo = MODULOS[rol]?.[active]
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      <TopBar />
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-4 py-6">
-        <RoleNav items={tabs} active={active} onChange={setTab} />
-        <main className="min-w-0 flex-1 pb-24 lg:pb-4">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-white">
+      {splashEl}
+      <TopBar onMenu={() => setNavOpen(true)} />
+      <div className="mx-auto flex w-full max-w-[1440px] flex-1 gap-6 px-4 py-6">
+        <RoleNav
+          items={tabs}
+          active={active}
+          onChange={setTab}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+        />
+        <main className="min-w-0 flex-1 pb-24 xl:pb-6">
           <div key={active} className="fade-in">
             {Modulo ? <Modulo /> : null}
           </div>

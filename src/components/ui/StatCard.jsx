@@ -1,4 +1,5 @@
 const TONES = {
+  brand: 'bg-brand-soft text-brand',
   emerald: 'bg-emerald-50 text-emerald-600',
   indigo: 'bg-indigo-50 text-indigo-600',
   amber: 'bg-amber-50 text-amber-600',
@@ -10,7 +11,7 @@ export default function StatCard({ icon: Icon, label, value, sub, tone = 'emeral
   return (
     <div
       style={style}
-      className={`pop-in flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${className}`}
+      className={`pop-in flex items-center gap-3 rounded-2xl bg-white shadow-soft p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${className}`}
     >
       {Icon && (
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 hover:scale-110 ${TONES[tone]}`}>

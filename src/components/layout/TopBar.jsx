@@ -1,31 +1,40 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Bell,
+  Camera,
   CheckCheck,
   CheckCircle2,
+  ChevronRight,
   Hourglass,
   Inbox,
-  Info,
   KeyRound,
+  Loader2,
   LogOut,
+  Menu,
   PackageOpen,
+  Save,
   ShoppingBag,
   Store,
+  Trash2,
   X,
   XCircle,
 } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { fmtFechaHora, money } from '../../utils/format'
+import { archivoADataURL } from '../../utils/imagen'
 import Logo from '../../assets/logo'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 import EmptyState from '../ui/EmptyState'
+import Input from '../ui/Input'
+import AvatarPersonal from '../ui/AvatarPersonal'
+import SwitchEstado from '../ui/SwitchEstado'
 import AcercaDeModal from '../AcercaDeModal'
 
 const ROL_LABEL = { cliente: 'Cliente', vendedor: 'Vendedor', admin: 'Admin' }
-const ROL_TONE = { cliente: 'indigo', vendedor: 'amber', admin: 'rose' }
+const ROL_TONE = { cliente: 'brand', vendedor: 'amber', admin: 'rose' }
 const ROLES_MOSTRADOR = ['vendedor', 'admin']
 
 const NOTIF_ICON = {
@@ -39,7 +48,7 @@ const NOTIF_ICON = {
   info: { icon: Bell, bg: 'bg-slate-100 text-slate-500' },
 }
 
-export default function TopBar() {
+export default function TopBar({ onMenu }) {
   const {
     session,
     logout,
@@ -51,13 +60,17 @@ export default function TopBar() {
     descartarSolicitud,
     notificaciones,
     productos,
+    personal,
   } = useKiosco()
   const [solicitudesOpen, setSolicitudesOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [acercaOpen, setAcercaOpen] = useState(false)
+  const [perfilOpen, setPerfilOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
 
   const puedeAlternar = ROLES_MOSTRADOR.includes(session?.rol)
+  // Integrante del equipo logueado (el cliente no tiene ficha en personal).
+  const yo = puedeAlternar ? (personal || []).find((p) => p.id === session?.id) : null
   const pendientes = puedeAlternar ? solicitudesPendientes : []
 
   /* ---------- Centro de notificaciones ---------- */
@@ -68,9 +81,13 @@ export default function TopBar() {
       : 'staff'
     : null
 
+  const esAdmin = session?.rol === 'admin'
   const feed = useMemo(() => {
     if (!claveFeed) return []
-    const items = (notificaciones || []).filter((n) => n.para === claveFeed)
+    // El admin escucha además el canal 'admin' (auditoría de estado).
+    const items = (notificaciones || []).filter(
+      (n) => n.para === claveFeed || (esAdmin && n.para === 'admin')
+    )
     // Alertas vivas (estado actual, no eventos): stock por debajo del mínimo.
     const vivas = puedeAlternar
       ? productos
@@ -83,7 +100,7 @@ export default function TopBar() {
           }))
       : []
     return [...vivas, ...items]
-  }, [notificaciones, claveFeed, puedeAlternar, productos])
+  }, [notificaciones, claveFeed, esAdmin, puedeAlternar, productos])
 
   // Leídas por usuario en este dispositivo (las notificaciones viven en la
   // base compartida; el estado de lectura es personal).
@@ -106,6 +123,19 @@ export default function TopBar() {
   const noLeidas = feed.filter((n) => !leidas.includes(n.id)).length
   const marcarTodas = () => persistLeidas([...new Set([...leidas, ...feed.map((n) => n.id)])])
   /* -------------------------------------------- */
+
+  // Accesos que viven en el cajón lateral (drawer móvil): "Mi Perfil"
+  // del equipo y "Acerca de Yapa" para cualquier rol.
+  useEffect(() => {
+    const onPerfil = () => setPerfilOpen(true)
+    const onAcerca = () => setAcercaOpen(true)
+    window.addEventListener('yapa:perfil', onPerfil)
+    window.addEventListener('yapa:acerca', onAcerca)
+    return () => {
+      window.removeEventListener('yapa:perfil', onPerfil)
+      window.removeEventListener('yapa:acerca', onAcerca)
+    }
+  }, [])
 
   const toggleAbierto = async () => {
     const nuevo = !config.abierto
@@ -142,30 +172,28 @@ export default function TopBar() {
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="relative mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 px-4">
+        <div className="relative mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-3 px-4">
           <div className="flex min-w-0 items-center gap-2.5">
-            <button
-              onClick={() => setAcercaOpen(true)}
-              title="Acerca de KioscoApp"
-              aria-label="Ver versión y créditos de la app"
-              className="flex min-w-0 items-center gap-2.5 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-slate-50"
-            >
+            {/* Hamburguesa: abre el cajón lateral del menú en <lg */}
+            {onMenu && (
+              <button
+                onClick={onMenu}
+                aria-label="Abrir menú"
+                className="-ml-1 rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 md:hidden"
+              >
+                <Menu size={20} />
+              </button>
+            )}
+            {/* Marca: isotipo "Y" + nombre. "Acerca de" vive en el drawer. */}
+            <div className="flex min-w-0 items-center gap-2.5 px-1 py-0.5">
               <Logo className="h-8 w-8 shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-bold leading-none text-slate-800">
-                  Kiosco<span className="text-emerald-600">App</span>
+                  Yapa
                 </p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">{config.direccion}</p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-400">{config.nombreKiosco}</p>
               </div>
-            </button>
-            <button
-              onClick={() => setAcercaOpen(true)}
-              title="Versión y créditos"
-              aria-label="Acerca de KioscoApp"
-              className="shrink-0 rounded-full p-1.5 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500"
-            >
-              <Info size={14} />
-            </button>
+            </div>
           </div>
 
           {session && (
@@ -175,7 +203,7 @@ export default function TopBar() {
                 <button
                   onClick={() => setSolicitudesOpen(true)}
                   title="Bandeja de solicitudes"
-                  className={`relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition-colors ${
+                  className={`relative hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition-colors md:inline-flex ${
                     pendientes.length > 0
                       ? 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
                       : 'bg-slate-50 text-slate-500 ring-slate-200 hover:bg-slate-100'
@@ -190,19 +218,12 @@ export default function TopBar() {
                   )}
                 </button>
               )}
-              {puedeAlternar && (
-                <button
-                  onClick={toggleAbierto}
-                  title={config.abierto ? 'Cerrar el kiosco' : 'Abrir el kiosco'}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition-colors ${
-                    config.abierto
-                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100'
-                      : 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
-                  }`}
-                >
-                  <Store size={13} />
-                  {config.abierto ? 'Abierto' : 'Cerrado'}
-                </button>
+              {/* Switch animado tipo iOS: el staff alterna el estado del
+                  kiosco; los clientes lo ven como indicador de solo lectura. */}
+              {puedeAlternar ? (
+                <SwitchEstado abierto={config.abierto} onToggle={toggleAbierto} />
+              ) : (
+                <SwitchEstado abierto={config.abierto} />
               )}
 
               {/* Campanita: centro de notificaciones unificado por rol.
@@ -212,7 +233,7 @@ export default function TopBar() {
                 title="Notificaciones"
                 aria-label={`Notificaciones${noLeidas ? ` (${noLeidas} sin leer)` : ''}`}
                 className={`relative rounded-full p-2 transition-colors ${
-                  notifOpen ? 'bg-emerald-50 text-emerald-600' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                  notifOpen ? 'bg-brand-soft text-brand' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                 }`}
               >
                 <Bell size={17} />
@@ -223,12 +244,32 @@ export default function TopBar() {
                 )}
               </button>
 
-              <Badge tone={ROL_TONE[session.rol]} className="hidden sm:inline-flex">
-                {ROL_LABEL[session.rol]}
-              </Badge>
-              <span className="hidden max-w-40 truncate text-sm font-medium text-slate-700 md:block">
-                {session.nombre}
-              </span>
+              {/* Badge + nombre: para el equipo abre "Mi Perfil" */}
+              {yo ? (
+                <button
+                  type="button"
+                  onClick={() => setPerfilOpen(true)}
+                  title="Mi Perfil"
+                  className="hidden items-center gap-2 rounded-full py-0.5 pl-0.5 pr-1.5 transition-colors hover:bg-slate-100 md:flex"
+                >
+                  <AvatarPersonal persona={yo} className="h-7 w-7" textoClassName="text-[10px]" />
+                  <Badge tone={ROL_TONE[session.rol]} className="hidden sm:inline-flex">
+                    {ROL_LABEL[session.rol]}
+                  </Badge>
+                  <span className="hidden max-w-40 truncate text-sm font-medium text-slate-700 md:block">
+                    {session.nombre}
+                  </span>
+                </button>
+              ) : (
+                <>
+                  <Badge tone={ROL_TONE[session.rol]} className="hidden sm:inline-flex">
+                    {ROL_LABEL[session.rol]}
+                  </Badge>
+                  <span className="hidden max-w-40 truncate text-sm font-medium text-slate-700 md:block">
+                    {session.nombre}
+                  </span>
+                </>
+              )}
               <Button variant="secondary" size="sm" onClick={logout}>
                 <LogOut size={14} />
                 <span className="hidden sm:inline">Salir</span>
@@ -240,7 +281,7 @@ export default function TopBar() {
           {notifOpen && session && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
-              <div className="pop-in absolute right-2 top-14 z-50 flex w-[min(92vw,22rem)] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+              <div className="pop-in absolute right-2 top-14 z-50 flex w-[min(92vw,22rem)] flex-col overflow-hidden rounded-2xl bg-white shadow-soft shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                   <p className="text-sm font-bold text-slate-800">
                     Notificaciones
@@ -253,7 +294,7 @@ export default function TopBar() {
                   {feed.length > 0 && (
                     <button
                       onClick={marcarTodas}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 transition-colors hover:text-emerald-700"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-brand transition-colors hover:text-brand-dark"
                     >
                       <CheckCheck size={13} /> Marcar todas como leídas
                     </button>
@@ -264,7 +305,8 @@ export default function TopBar() {
                     onClick={() => { setNotifOpen(false); setSolicitudesOpen(true) }}
                     className="flex items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100"
                   >
-                    <Inbox size={14} /> {pendientes.length} solicitud(es) pendiente(s) de revisión →
+                    <Inbox size={14} /> {pendientes.length} solicitud(es) pendiente(s) de revisión
+                    <ChevronRight size={14} className="ml-auto" />
                   </button>
                 )}
                 <div className="max-h-[24rem] overflow-y-auto">
@@ -284,7 +326,7 @@ export default function TopBar() {
                           <li
                             key={n.id}
                             className={`flex items-start gap-3 border-b border-slate-50 px-4 py-3 last:border-0 ${
-                              leida ? 'opacity-60' : 'bg-emerald-50/40'
+                              leida ? 'opacity-60' : 'bg-brand-soft/50'
                             }`}
                           >
                             <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
@@ -324,7 +366,7 @@ export default function TopBar() {
         ) : (
           <ul className="flex flex-col gap-2">
             {pendientes.map((s) => (
-              <li key={s.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <li key={s.id} className="rounded-xl bg-white shadow-soft px-4 py-3">
                 <div className="flex items-start gap-3">
                   <div
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
@@ -368,6 +410,157 @@ export default function TopBar() {
       </Modal>
 
       <AcercaDeModal open={acercaOpen} onClose={() => setAcercaOpen(false)} />
+
+      {/* Perfil editable del integrante logueado */}
+      <Modal open={perfilOpen} onClose={() => setPerfilOpen(false)} title="Mi Perfil">
+        {perfilOpen && yo && <FormMiPerfil persona={yo} />}
+      </Modal>
     </>
+  )
+}
+
+// "Mi Perfil": el integrante edita sus datos visibles, sube/cambia su
+// foto (optimizada a DataURL) y cambia su propio PIN validando el actual.
+function FormMiPerfil({ persona }) {
+  const { updatePersonal, cambiarPinPersonal, notify } = useKiosco()
+  const [form, setForm] = useState({ nombre: persona.nombre, apellido: persona.apellido, usuario: persona.usuario })
+  const [pins, setPins] = useState({ actual: '', nuevo: '', repite: '' })
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef(null)
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const subirFoto = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      const dataUrl = await archivoADataURL(file, { max: 192, calidad: 0.8 })
+      await updatePersonal(persona.id, { avatarUrl: dataUrl })
+      notify('Foto de perfil actualizada.')
+    } catch (err) {
+      notify(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const quitarFoto = async () => {
+    try {
+      await updatePersonal(persona.id, { avatarUrl: '' })
+      notify('Foto quitada: se muestran tus iniciales.', 'info')
+    } catch (err) {
+      notify(err.message, 'error')
+    }
+  }
+
+  const guardarDatos = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await updatePersonal(persona.id, form)
+      notify('Perfil actualizado.')
+    } catch (err) {
+      notify(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const guardarPin = async (e) => {
+    e.preventDefault()
+    if (!/^\d{4}$/.test(pins.nuevo)) return notify('El PIN nuevo debe tener exactamente 4 dígitos.', 'error')
+    if (pins.nuevo !== pins.repite) return notify('La confirmación no coincide con el PIN nuevo.', 'error')
+    setBusy(true)
+    try {
+      await cambiarPinPersonal(persona.id, pins.actual, pins.nuevo)
+      setPins({ actual: '', nuevo: '', repite: '' })
+      notify('PIN actualizado: usá el nuevo en tu próximo ingreso.')
+    } catch (err) {
+      notify(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {/* Foto de perfil */}
+      <div className="flex items-center gap-4">
+        <AvatarPersonal persona={persona} className="h-16 w-16" textoClassName="text-xl" />
+        <div className="flex flex-col gap-2">
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={subirFoto} />
+          <Button type="button" size="sm" variant="secondary" onClick={() => fileRef.current?.click()} disabled={busy}>
+            <Camera size={14} /> {persona.avatarUrl ? 'Cambiar foto' : 'Subir foto'}
+          </Button>
+          {persona.avatarUrl && (
+            <button type="button" onClick={quitarFoto} className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 transition-colors hover:text-rose-500">
+              <Trash2 size={11} /> Quitar foto
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Datos visibles */}
+      <form onSubmit={guardarDatos} className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Nombre *" value={form.nombre} onChange={set('nombre')} required />
+          <Input label="Apellido" value={form.apellido} onChange={set('apellido')} />
+        </div>
+        <Input label="Usuario *" value={form.usuario} onChange={set('usuario')} required />
+        <div className="flex justify-end">
+          <Button type="submit" size="sm" disabled={busy}>
+            {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            Guardar datos
+          </Button>
+        </div>
+      </form>
+
+      <hr className="border-slate-100" />
+
+      {/* Cambio de PIN propio */}
+      <form onSubmit={guardarPin} className="flex flex-col gap-3">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <KeyRound size={13} /> Cambiar mi PIN
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <Input
+            label="PIN actual"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
+            value={pins.actual}
+            onChange={(e) => setPins((f) => ({ ...f, actual: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            placeholder="••••"
+            required
+          />
+          <Input
+            label="PIN nuevo"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
+            value={pins.nuevo}
+            onChange={(e) => setPins((f) => ({ ...f, nuevo: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            placeholder="4 dígitos"
+            required
+          />
+          <Input
+            label="Repetir"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
+            value={pins.repite}
+            onChange={(e) => setPins((f) => ({ ...f, repite: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            placeholder="Confirmar"
+            required
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" size="sm" variant="secondary" disabled={busy}>
+            <KeyRound size={14} /> Actualizar PIN
+          </Button>
+        </div>
+      </form>
+    </div>
   )
 }

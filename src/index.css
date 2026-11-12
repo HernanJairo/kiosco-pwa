@@ -65,6 +65,124 @@ body {
   animation: pop-in 0.22s ease-out;
 }
 
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+.slide-in-left {
+  animation: slide-in-left 0.25s ease-out;
+}
+
+/* ═══ Splash screen: coreografía ~2.5s estilo app nativa ═══ */
+:root {
+  --ease-splash: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Paso 1: zoom-in con pulso sutil */
+@keyframes splash-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.splash-logo {
+  animation:
+    splash-pop 0.7s var(--ease-splash) both,
+    splash-drift-y 0.8s 0.7s var(--ease-splash) both;
+}
+
+/* Paso 2: en móvil el logo sube; en desktop se desliza a la izquierda */
+@keyframes splash-drift-y {
+  to {
+    transform: translateY(-14px);
+  }
+}
+@keyframes splash-drift-x {
+  to {
+    transform: translateX(-40px);
+  }
+}
+@media (min-width: 640px) {
+  .splash-logo {
+    animation:
+      splash-pop 0.7s var(--ease-splash) both,
+      splash-drift-x 0.8s 0.7s var(--ease-splash) both;
+  }
+}
+
+/* Anillo de pulso suave detrás del logo */
+@keyframes splash-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.15;
+    transform: scale(1.18);
+  }
+}
+.splash-glow {
+  animation: splash-glow 1.8s ease-in-out 0.3s infinite;
+}
+
+/* Texto de bienvenida: entra desde abajo (móvil) / desde la derecha (desktop) */
+@keyframes splash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes splash-slide-l {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.splash-text {
+  animation: splash-rise 0.8s 0.75s var(--ease-splash) both;
+}
+@media (min-width: 640px) {
+  .splash-text {
+    animation: splash-slide-l 0.8s 0.75s var(--ease-splash) both;
+  }
+}
+
+/* Crédito institucional: fade suave */
+@keyframes splash-fade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.splash-credit {
+  animation: splash-fade 0.8s 1.5s ease-out both;
+}
+
 @media print {
   @page {
     margin: 0;

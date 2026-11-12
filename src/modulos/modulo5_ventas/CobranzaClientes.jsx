@@ -65,7 +65,7 @@ export default function CobranzaClientes() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Ej: 45111222, María o 5° A…"
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-lg border border-transparent bg-[#F6F6F6] py-2 pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
           />
         </div>
         <ul className="flex max-h-[420px] flex-col gap-1.5 overflow-y-auto">
@@ -75,8 +75,8 @@ export default function CobranzaClientes() {
                 onClick={() => setSel(al.id)}
                 className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
                   sel === al.id
-                    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-200'
-                    : 'border-slate-200 bg-white hover:border-emerald-200'
+                    ? 'border-brand/40 bg-brand-soft ring-1 ring-blue-200'
+                    : 'border-slate-200 bg-white hover:border-brand/30'
                 }`}
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
@@ -136,7 +136,7 @@ export default function CobranzaClientes() {
               )}
             </Card>
 
-            <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            <div className="flex items-start gap-2.5 rounded-xl border border-transparent bg-[#F6F6F6] px-4 py-3 text-xs text-slate-500">
               <Lock size={14} className="mt-0.5 shrink-0 text-slate-400" />
               Vista operativa de mostrador: solo se muestran datos de cuenta del cliente. Los datos
               personales del cliente (teléfono, correo, dirección) no están disponibles para este rol.

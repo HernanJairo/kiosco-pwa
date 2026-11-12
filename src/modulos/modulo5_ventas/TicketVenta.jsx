@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal'
 import Button from '../../components/ui/Button'
 import Logo from '../../assets/logo'
 
-const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', fiado: 'Cta. Corriente' }
+const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', saldo: 'Billetera', fiado: 'Cta. Corriente' }
 
 export default function TicketVenta({ venta, onClose }) {
   const { config, notify } = useKiosco()

@@ -1,34 +1,36 @@
 import { useState } from 'react'
-import { CheckCircle2, Cloud, HardDrive, KeyRound, RefreshCcw, Save, ShieldCheck, Store, Trash2, User, UserPlus } from 'lucide-react'
+import { CheckCircle2, Cloud, HardDrive, KeyRound, Loader2, Pencil, RefreshCcw, Save, Store, Trash2, UserPlus, UserX } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
-import Input from '../../components/ui/Input'
+import Input, { Select } from '../../components/ui/Input'
 import Modal from '../../components/ui/Modal'
+import AvatarPersonal from '../../components/ui/AvatarPersonal'
+import SwitchEstado from '../../components/ui/SwitchEstado'
 
-const VACIO_VENDEDOR = { nombre: '', usuario: '', clave: '' }
+const VACIO_PERSONAL = { nombre: '', apellido: '', usuario: '', rol: 'vendedor', pin: '', puesto: '' }
 
-// Tarjeta "Mi clave de acceso": cualquier rol staff (admin/vendedor) ve su
-// clave vigente y la actualiza confirmándola por duplicado.
+// Tarjeta "Mi clave de acceso": cualquier integrante del equipo ve su
+// PIN vigente y lo cambia validando el actual.
 export function PanelMiAcceso() {
-  const { session, staff, updateStaffClave, notify } = useKiosco()
-  const yo = staff.find((s) => s.id === session?.id)
-  const [form, setForm] = useState({ clave: '', repite: '' })
+  const { session, personal, cambiarPinPersonal, notify } = useKiosco()
+  const yo = personal.find((s) => s.id === session?.id)
+  const [form, setForm] = useState({ actual: '', nuevo: '', repite: '' })
   const [busy, setBusy] = useState(false)
   const [ok, setOk] = useState(false)
 
   const guardar = async (e) => {
     e.preventDefault()
-    if (form.clave.trim().length < 4) return notify('La clave debe tener al menos 4 caracteres.', 'error')
-    if (form.clave !== form.repite) return notify('La confirmación no coincide con la nueva clave.', 'error')
+    if (!/^\d{4}$/.test(form.nuevo)) return notify('El PIN nuevo debe tener exactamente 4 dígitos.', 'error')
+    if (form.nuevo !== form.repite) return notify('La confirmación no coincide con el PIN nuevo.', 'error')
     setBusy(true)
     try {
-      await updateStaffClave(yo.id, form.clave)
-      setForm({ clave: '', repite: '' })
+      await cambiarPinPersonal(yo.id, form.actual, form.nuevo)
+      setForm({ actual: '', nuevo: '', repite: '' })
       setOk(true)
       setTimeout(() => setOk(false), 3500)
-      notify('Tu clave de acceso fue actualizada.')
+      notify('Tu PIN de acceso fue actualizado.')
     } catch (err) {
       notify(err.message, 'error')
     } finally {
@@ -38,42 +40,56 @@ export function PanelMiAcceso() {
 
   if (!yo) return null
   return (
-    <Card title="Mi clave de acceso" subtitle="Credencial de ingreso al mostrador">
+    <Card title="Mi clave de acceso" subtitle="PIN de ingreso al mostrador">
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-inset ring-slate-200">
           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${yo.rol === 'admin' ? 'bg-rose-50 text-rose-500' : 'bg-amber-50 text-amber-600'}`}>
             <KeyRound size={16} />
           </div>
           <span>
-            <b>{yo.nombre}</b> · @{yo.usuario} · clave actual: <b className="font-mono">{yo.clave}</b>
+            <b>{yo.nombre} {yo.apellido}</b> · @{yo.usuario} · PIN actual: <b className="font-mono">{yo.pin}</b>
           </span>
         </div>
-        <form onSubmit={guardar} className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-3">
+        <form onSubmit={guardar} className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-4">
           <Input
-            label="Nueva clave"
-            value={form.clave}
-            onChange={(e) => setForm({ ...form, clave: e.target.value })}
-            placeholder="Mínimo 4 caracteres"
-            autoComplete="new-password"
+            label="PIN actual"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
+            value={form.actual}
+            onChange={(e) => setForm({ ...form, actual: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+            placeholder="••••"
             required
           />
           <Input
-            label="Repetir nueva clave"
+            label="PIN nuevo"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
+            value={form.nuevo}
+            onChange={(e) => setForm({ ...form, nuevo: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+            placeholder="4 dígitos"
+            required
+          />
+          <Input
+            label="Repetir PIN nuevo"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
             value={form.repite}
-            onChange={(e) => setForm({ ...form, repite: e.target.value })}
+            onChange={(e) => setForm({ ...form, repite: e.target.value.replace(/\D/g, '').slice(0, 4) })}
             placeholder="Confirmación"
-            autoComplete="new-password"
             required
           />
           <div className="flex items-end">
             <Button type="submit" disabled={busy} className="w-full">
-              <Save size={15} /> {busy ? 'Guardando…' : 'Actualizar clave'}
+              <Save size={15} /> {busy ? 'Guardando…' : 'Actualizar PIN'}
             </Button>
           </div>
         </form>
         {ok && (
           <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-700">
-            <CheckCircle2 size={15} /> Clave actualizada correctamente: usá la nueva en tu próximo ingreso.
+            <CheckCircle2 size={15} /> PIN actualizado correctamente: usá el nuevo en tu próximo ingreso.
           </p>
         )}
       </div>
@@ -82,11 +98,14 @@ export function PanelMiAcceso() {
 }
 
 export default function ConfiguracionKiosco() {
-  const { config, staff, updateConfig, resetDemo, addVendedor, deleteVendedor, notify, persistencia } = useKiosco()
+  const { config, session, personal, updateConfig, resetDemo, updatePersonal, eliminarPersonal, notify, persistencia } = useKiosco()
   const [form, setForm] = useState({ ...config })
-  const [nuevo, setNuevo] = useState({ ...VACIO_VENDEDOR })
+  const [altaOpen, setAltaOpen] = useState(false)
+  const [editDe, setEditDe] = useState(null) // integrante → edición
   const [confirmReset, setConfirmReset] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  const adminsActivos = personal.filter((p) => p.rol === 'admin' && p.activo !== false).length
 
   const guardar = async (e) => {
     e.preventDefault()
@@ -103,23 +122,31 @@ export default function ConfiguracionKiosco() {
     notify(nuevoEstado ? 'Kiosco habilitado.' : 'Kiosco cerrado temporalmente.', 'info')
   }
 
-  const altaVendedor = async (e) => {
-    e.preventDefault()
-    setBusy(true)
+  const toggleActivo = async (p) => {
     try {
-      const u = await addVendedor(nuevo)
-      notify(`Vendedor "${u.nombre}" creado · ya puede ingresar con "${u.usuario}".`)
-      setNuevo({ ...VACIO_VENDEDOR })
+      await updatePersonal(p.id, { activo: p.activo === false })
+      notify(p.activo === false ? `Acceso de ${p.nombre} reactivado.` : `Acceso de ${p.nombre} desactivado.`, 'info')
     } catch (err) {
       notify(err.message, 'error')
-    } finally {
-      setBusy(false)
     }
   }
 
-  const bajaVendedor = async (u) => {
-    await deleteVendedor(u.id)
-    notify(`Acceso de "${u.nombre}" eliminado.`, 'info')
+  const resetearPin = async (p) => {
+    try {
+      await updatePersonal(p.id, { pin: '1234' })
+      notify(`PIN de ${p.nombre} restablecido a 1234 (temporal).`, 'info')
+    } catch (err) {
+      notify(err.message, 'error')
+    }
+  }
+
+  const baja = async (p) => {
+    try {
+      await eliminarPersonal(p.id)
+      notify(`${p.nombre} ${p.apellido} fue dado de baja del equipo.`, 'info')
+    } catch (err) {
+      notify(err.message, 'error')
+    }
   }
 
   return (
@@ -154,6 +181,7 @@ export default function ConfiguracionKiosco() {
           <Input label="Nombre del kiosco" value={form.nombreKiosco} onChange={(e) => setForm({ ...form, nombreKiosco: e.target.value })} required />
           <Input label="Dirección / ubicación" value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} required />
           <Input label="Datos de contacto" value={form.contacto} onChange={(e) => setForm({ ...form, contacto: e.target.value })} />
+          <Input label="Correo del comercio (opcional)" type="email" value={form.emailKiosco ?? ''} onChange={(e) => setForm({ ...form, emailKiosco: e.target.value })} placeholder="kiosco@correo.com" />
           <Input label="Horario de atención" value={form.horario} onChange={(e) => setForm({ ...form, horario: e.target.value })} />
           <Input label="WhatsApp del kiosco (avisos de pago)" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} placeholder="+5493881234567" required />
           <Input label="Alias para transferencias" value={form.aliasPago} onChange={(e) => setForm({ ...form, aliasPago: e.target.value })} placeholder="KIOSCO.SANMARTIN.MP" required />
@@ -176,39 +204,74 @@ export default function ConfiguracionKiosco() {
 
       <PanelMiAcceso />
 
-      <Card title="Gestión de Personal / Vendedores" subtitle="Cuentas de acceso al mostrador">
-        <ul className="mb-4 flex flex-col gap-2">
-          {staff.map((s) => (
-            <li key={s.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${s.rol === 'admin' ? 'bg-rose-50 text-rose-500' : 'bg-amber-50 text-amber-600'}`}>
-                {s.rol === 'admin' ? <ShieldCheck size={17} /> : <User size={17} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-slate-800">{s.nombre}</p>
-                <p className="text-xs text-slate-400">@{s.usuario}</p>
-              </div>
-              <Badge tone={s.rol === 'admin' ? 'rose' : 'amber'}>{s.rol === 'admin' ? 'Admin' : 'Vendedor'}</Badge>
-              {s.rol === 'vendedor' && (
-                <Button variant="ghost" size="sm" onClick={() => bajaVendedor(s)} className="text-rose-500 hover:bg-rose-50" aria-label={`Eliminar ${s.nombre}`}>
-                  <Trash2 size={14} />
-                </Button>
-              )}
-            </li>
-          ))}
+      <Card
+        title="Equipo y Permisos (ABM Personal)"
+        subtitle="Altas, roles y accesos de administradores y vendedores"
+        actions={
+          <Button size="sm" onClick={() => setAltaOpen(true)}>
+            <UserPlus size={14} /> Nuevo integrante
+          </Button>
+        }
+      >
+        <ul className="flex flex-col gap-2">
+          {personal.map((p) => {
+            const esUltimoAdmin = p.rol === 'admin' && p.activo !== false && adminsActivos === 1
+            const inactivo = p.activo === false
+            return (
+              <li key={p.id} className={`flex flex-wrap items-center gap-3 rounded-xl bg-white shadow-soft px-4 py-3 ${inactivo ? 'opacity-60' : ''}`}>
+                <AvatarPersonal persona={p} className="h-9 w-9" textoClassName="text-xs" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-800">
+                    {p.nombre} {p.apellido}
+                    {p.id === session?.id && <span className="ml-1.5 text-[10px] font-medium text-slate-400">(vos)</span>}
+                  </p>
+                  <p className="text-xs text-slate-400">@{p.usuario}{p.puesto ? ` · ${p.puesto}` : ''}</p>
+                </div>
+                <Badge tone={p.rol === 'admin' ? 'rose' : 'amber'}>{p.rol === 'admin' ? 'Admin' : 'Vendedor'}</Badge>
+                {inactivo && <Badge tone="slate">Desactivado</Badge>}
+                <div className="flex flex-wrap gap-1.5">
+                  <Button size="sm" variant="ghost" onClick={() => setEditDe(p)} title="Editar datos y rol" aria-label={`Editar ${p.nombre}`}>
+                    <Pencil size={14} />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => resetearPin(p)} title="Restablecer PIN a 1234" aria-label={`Restablecer PIN de ${p.nombre}`}>
+                    <KeyRound size={14} />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => toggleActivo(p)}
+                    disabled={esUltimoAdmin}
+                    title={
+                      esUltimoAdmin
+                        ? 'No se puede desactivar al último administrador activo'
+                        : inactivo
+                          ? 'Reactivar acceso'
+                          : 'Desactivar acceso'
+                    }
+                    aria-label={`${inactivo ? 'Reactivar' : 'Desactivar'} a ${p.nombre}`}
+                    className={inactivo ? 'text-emerald-600 hover:bg-emerald-50' : 'text-amber-500 hover:bg-amber-50'}
+                  >
+                    {inactivo ? <CheckCircle2 size={14} /> : <UserX size={14} />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => baja(p)}
+                    disabled={esUltimoAdmin}
+                    title={esUltimoAdmin ? 'No se puede eliminar al último administrador activo' : 'Eliminar del equipo'}
+                    aria-label={`Eliminar a ${p.nombre}`}
+                    className="text-slate-400 hover:text-rose-500"
+                  >
+                    <Trash2 size={14} />
+                  </Button>
+                </div>
+              </li>
+            )
+          })}
         </ul>
-
-        <form onSubmit={altaVendedor} className="grid grid-cols-1 gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-4 sm:grid-cols-4">
-          <Input label="Nombre" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Ej: Ana Pérez" required />
-          <Input label="Usuario" value={nuevo.usuario} onChange={(e) => setNuevo({ ...nuevo, usuario: e.target.value })} placeholder="Ej: ana" required />
-          <Input label="Contraseña" type="text" value={nuevo.clave} onChange={(e) => setNuevo({ ...nuevo, clave: e.target.value })} placeholder="Ej: 1234" required />
-          <div className="flex items-end">
-            <Button type="submit" variant="success" disabled={busy} className="w-full">
-              <UserPlus size={15} /> Alta vendedor
-            </Button>
-          </div>
-        </form>
-        <p className="mt-2 text-[11px] text-slate-400">
-          El vendedor puede autenticarse de inmediato desde el login, pestaña "Personal".
+        <p className="mt-3 text-[11px] text-slate-400">
+          El usuario puede ser un DNI o un username; el acceso es con PIN de 4 dígitos. El sistema
+          siempre conserva al menos un administrador activo.
         </p>
       </Card>
 
@@ -227,16 +290,7 @@ export default function ConfiguracionKiosco() {
               </p>
             </div>
           </div>
-          <button
-            onClick={toggleAbierto}
-            role="switch"
-            aria-checked={config.abierto}
-            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${config.abierto ? 'bg-emerald-500' : 'bg-slate-300'}`}
-          >
-            <span
-              className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${config.abierto ? 'left-[22px]' : 'left-0.5'}`}
-            />
-          </button>
+          <SwitchEstado abierto={config.abierto} onToggle={toggleAbierto} />
         </div>
       </Card>
 
@@ -267,6 +321,154 @@ export default function ConfiguracionKiosco() {
           </div>
         </div>
       </Modal>
+
+      {/* Alta de integrante del equipo */}
+      <Modal open={altaOpen} onClose={() => setAltaOpen(false)} title="Nuevo integrante del equipo">
+        {altaOpen && <FormAltaPersonal onClose={() => setAltaOpen(false)} />}
+      </Modal>
+
+      {/* Edición de integrante */}
+      <Modal open={!!editDe} onClose={() => setEditDe(null)} title="Editar integrante">
+        {editDe && <FormEditarPersonal persona={editDe} onClose={() => setEditDe(null)} />}
+      </Modal>
     </div>
+  )
+}
+
+// Alta de administrador o vendedor: usuario único (DNI o username) +
+// PIN inicial de 4 dígitos.
+function FormAltaPersonal({ onClose }) {
+  const { addPersonal, notify } = useKiosco()
+  const [form, setForm] = useState({ ...VACIO_PERSONAL })
+  const [busy, setBusy] = useState(false)
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const guardar = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      const u = await addPersonal(form)
+      notify(`${u.rol === 'admin' ? 'Administrador' : 'Vendedor'} "${u.nombre} ${u.apellido}" creado · ingresa con "${u.usuario}".`)
+      onClose()
+    } catch (err) {
+      notify(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Nombre *" placeholder="Ej.: Ana" autoFocus value={form.nombre} onChange={set('nombre')} required />
+        <Input label="Apellido" placeholder="Ej.: Pérez" value={form.apellido} onChange={set('apellido')} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          label="Usuario *"
+          placeholder="DNI o username único"
+          value={form.usuario}
+          onChange={set('usuario')}
+          required
+        />
+        <Select label="Rol *" value={form.rol} onChange={set('rol')}>
+          <option value="vendedor">Vendedor</option>
+          <option value="admin">Administrador</option>
+        </Select>
+      </div>
+      <Input
+        label="Puesto (opcional)"
+        placeholder='Ej.: "Mostrador", "Caja"'
+        value={form.puesto}
+        onChange={set('puesto')}
+      />
+      <Input
+        label="PIN inicial (4 dígitos) *"
+        inputMode="numeric"
+        maxLength={4}
+        placeholder="Ej.: 1234"
+        value={form.pin}
+        onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+        required
+      />
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+        <Button type="submit" variant="success" disabled={busy}>
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}
+          {busy ? 'Creando…' : 'Crear integrante'}
+        </Button>
+      </div>
+      <p className="text-[11px] text-slate-400">
+        El integrante ingresa desde "Acceso Personal / Mostrador" con su usuario y este PIN.
+      </p>
+    </form>
+  )
+}
+
+// Edición administrativa del integrante: datos, rol y acceso. La regla
+// del último admin activo la valida el núcleo (operaciones.js).
+function FormEditarPersonal({ persona, onClose }) {
+  const { updatePersonal, notify } = useKiosco()
+  const [form, setForm] = useState({
+    nombre: persona.nombre,
+    apellido: persona.apellido,
+    usuario: persona.usuario,
+    rol: persona.rol,
+    activo: persona.activo !== false,
+    puesto: persona.puesto || '',
+  })
+  const [busy, setBusy] = useState(false)
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const guardar = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    try {
+      await updatePersonal(persona.id, form)
+      notify(`Datos de ${form.nombre} actualizados.`)
+      onClose()
+    } catch (err) {
+      notify(err.message, 'error')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Nombre *" autoFocus value={form.nombre} onChange={set('nombre')} required />
+        <Input label="Apellido" value={form.apellido} onChange={set('apellido')} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Input label="Usuario *" value={form.usuario} onChange={set('usuario')} required />
+        <Select label="Rol *" value={form.rol} onChange={set('rol')}>
+          <option value="vendedor">Vendedor</option>
+          <option value="admin">Administrador</option>
+        </Select>
+      </div>
+      <Input label="Puesto (opcional)" placeholder='Ej.: "Mostrador", "Caja"' value={form.puesto} onChange={set('puesto')} />
+      <label className="flex items-center gap-2.5 rounded-xl border border-transparent bg-[#F6F6F6] px-4 py-3 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          checked={form.activo}
+          onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))}
+          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+        />
+        <span>
+          <b>Acceso habilitado</b>
+          <span className="block text-[11px] text-slate-400">
+            Si lo desactivás, no puede ingresar al mostrador hasta reactivarlo.
+          </span>
+        </span>
+      </label>
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+        <Button type="submit" disabled={busy}>
+          {busy ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+          {busy ? 'Guardando…' : 'Guardar cambios'}
+        </Button>
+      </div>
+    </form>
   )
 }

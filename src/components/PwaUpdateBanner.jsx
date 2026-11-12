@@ -65,16 +65,16 @@ export default function PwaUpdateBanner() {
 
   return (
     <div className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2">
-      <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-white shadow-xl ring-1 ring-white/10">
+      <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#202125] px-4 py-3 text-white shadow-xl ring-1 ring-white/10">
         <span className="text-sm font-medium">
-          Nueva versión disponible 🚀
+          Nueva versión disponible
           <span className="block text-xs font-normal text-slate-400">
             Actualizando automáticamente en {segundos}s…
           </span>
         </span>
         <button
           onClick={actualizar}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-brand px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
         >
           <RefreshCw size={14} /> Actualizar
         </button>

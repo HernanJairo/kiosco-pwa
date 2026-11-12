@@ -149,7 +149,7 @@ export default function ProductosABM() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar producto…"
-            className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            className="w-full rounded-lg border border-transparent bg-[#F6F6F6] py-2 pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
           />
         </div>
         <Select value={cat} onChange={(e) => setCat(e.target.value)} className="sm:w-48">
@@ -187,7 +187,7 @@ export default function ProductosABM() {
                   </td>
                   <td className="py-3 pr-4 text-slate-500">{p.categoria}</td>
                   <td className="py-3 pr-4 text-slate-500">{money(p.costo)}</td>
-                  <td className="py-3 pr-4 font-semibold text-emerald-600">{money(p.precio)}</td>
+                  <td className="py-3 pr-4 font-semibold text-brand">{money(p.precio)}</td>
                   <td className="py-3 pr-4">
                     <Badge tone={p.stock <= 0 ? 'rose' : p.stock < p.stockMin ? 'amber' : 'emerald'}>
                       {p.stock} u.
@@ -299,7 +299,7 @@ export default function ProductosABM() {
                     onChange={(e) => setCodigoInput(e.target.value.trim())}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); agregarCodigo() } }}
                     placeholder="Ej: 7790895000997"
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft"
                   />
                 </div>
                 <Button type="button" variant="secondary" onClick={agregarCodigo}>

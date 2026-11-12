@@ -43,6 +43,7 @@ export default function SelectorAvatar({ cliente }) {
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
         {AVATARES.map((av) => {
           const activo = selAvatar?.k === av.k
+          const Icon = av.icon
           return (
             <button
               key={av.k}
@@ -50,13 +51,13 @@ export default function SelectorAvatar({ cliente }) {
               onClick={() => elegir(av.k)}
               title={av.nombre}
               aria-label={`Avatar ${av.nombre}`}
-              className={`relative flex aspect-square items-center justify-center rounded-2xl text-2xl transition-all hover:-translate-y-0.5 hover:shadow-md ${fondoAvatar(av.k)} ${
-                activo ? 'ring-2 ring-emerald-500 ring-offset-2' : 'ring-1 ring-inset ring-slate-200'
+              className={`relative flex aspect-square items-center justify-center rounded-2xl transition-all hover:-translate-y-0.5 hover:shadow-md ${fondoAvatar(av.k)} ${
+                activo ? 'ring-2 ring-brand ring-offset-2' : 'ring-1 ring-inset ring-slate-200'
               }`}
             >
-              {av.emoji}
+              <Icon size={22} strokeWidth={2} />
               {activo && (
-                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white shadow">
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-white shadow">
                   <Check size={12} strokeWidth={3} />
                 </span>
               )}

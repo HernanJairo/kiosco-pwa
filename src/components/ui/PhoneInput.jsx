@@ -29,7 +29,7 @@ export default function PhoneInput({
         inputMode="tel"
         placeholder={placeholder ?? 'Ej: 3886003447'}
         required={required}
-        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-800 outline-none placeholder-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500"
+        className="w-full rounded-xl border border-transparent bg-[#F6F6F6] px-3.5 py-2.5 text-base text-[#202125] outline-none placeholder-slate-400 transition-all duration-200 ease-out focus:border-[#009DE0]/40 focus:bg-white focus:ring-2 focus:ring-[#009DE0]/25"
       />
       <p className="mt-1 text-[11px] text-slate-400">
         {e164

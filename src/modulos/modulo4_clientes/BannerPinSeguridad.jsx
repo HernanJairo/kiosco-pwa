@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { ShieldCheck, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import Button from '../../components/ui/Button'
 import Input from '../../components/ui/Input'
@@ -41,19 +41,19 @@ export default function BannerPinSeguridad({ pin, dni, onGuardar }) {
 
   return (
     <>
-      <div className="flex items-center gap-2.5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-xs font-medium text-indigo-800">
-        <span aria-hidden="true">🔐</span>
+      <div className="flex items-center gap-2.5 rounded-xl border border-blue-200 bg-brand-soft px-4 py-2.5 text-xs font-medium text-brand">
+        <ShieldCheck size={15} className="shrink-0" />
         <span className="min-w-0 flex-1">Por seguridad, te sugerimos personalizar tu PIN de acceso.</span>
         <button
           onClick={() => setOpen(true)}
-          className="shrink-0 font-semibold text-indigo-700 underline decoration-indigo-300 underline-offset-2 transition-colors hover:text-indigo-900"
+          className="shrink-0 font-semibold underline decoration-blue-300 underline-offset-2 transition-colors hover:text-brand-dark"
         >
           Cambiar PIN
         </button>
         <button
           onClick={() => setDismissed(true)}
           aria-label="Descartar aviso"
-          className="shrink-0 rounded p-0.5 text-indigo-400 transition-colors hover:bg-indigo-100 hover:text-indigo-600"
+          className="shrink-0 rounded p-0.5 text-brand/50 transition-colors hover:bg-blue-100 hover:text-brand"
         >
           <X size={13} />
         </button>

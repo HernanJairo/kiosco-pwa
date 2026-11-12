@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kiosco-cache-v3';
+const CACHE_NAME = 'yapa-cache-v9';
 const PRECACHE = ['/', '/index.html', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronUp, HandCoins, Hourglass, Landmark, Loader2, Minus, Plus, ScanLine, Search, ShoppingCart, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronUp, HandCoins, Hourglass, Landmark, Loader2, Minus, PackageCheck, Plus, ScanLine, Search, ShoppingCart, Trash2, Wallet, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { incluye, norm } from '../../utils/busqueda'
 import { fmtFechaHora, money } from '../../utils/format'
@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import AvatarCliente from '../../components/ui/AvatarCliente'
 import ProductoImg from '../../components/ui/ProductoImg'
+import CategoriaTile3D from '../../components/ui/CategoriaTile3D'
 import EscanerCamara from '../../components/ui/EscanerCamara'
 import TicketVenta from './TicketVenta'
 import { limiteFiadoVigente } from '../../context/operaciones'
@@ -15,6 +16,7 @@ import { limiteFiadoVigente } from '../../context/operaciones'
 const METODOS = [
   { k: 'efectivo', label: 'Efectivo', icon: Banknote, active: 'border-emerald-400 bg-emerald-50 text-emerald-700' },
   { k: 'transferencia', label: 'Transferencia', icon: Landmark, active: 'border-indigo-400 bg-indigo-50 text-indigo-700' },
+  { k: 'saldo', label: 'Billetera', icon: Wallet, active: 'border-[#009DE0] bg-[#EBF7FD] text-[#007AB8]' },
   { k: 'fiado', label: 'Cta. Corriente', icon: HandCoins, active: 'border-amber-400 bg-amber-50 text-amber-700' },
 ]
 
@@ -32,7 +34,7 @@ function BuscadorCliente({ q, onQ, resultados, onSelect, borde = 'border-slate-2
         value={q}
         onChange={(e) => onQ(e.target.value)}
         placeholder="Buscar cliente por nombre, DNI o teléfono…"
-        className={`w-full rounded-lg border ${borde} bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100`}
+        className={`w-full rounded-lg border ${borde} bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft`}
       />
       <ul className="mt-2 flex max-h-44 flex-col gap-1 overflow-y-auto">
         {resultados.map((a) => (
@@ -41,7 +43,7 @@ function BuscadorCliente({ q, onQ, resultados, onSelect, borde = 'border-slate-2
               onClick={() => onSelect(a)}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white"
             >
-              <AvatarCliente cliente={a} className="h-7 w-7" emojiClassName="text-sm" textoClassName="text-[9px]" />
+              <AvatarCliente cliente={a} className="h-7 w-7" textoClassName="text-[9px]" />
               <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{a.nombre} {a.apellido} · DNI {a.dni}</span>
               <span className="text-[11px] text-slate-400">debe {money(a.deuda)}</span>
             </button>
@@ -59,7 +61,7 @@ function BuscadorCliente({ q, onQ, resultados, onSelect, borde = 'border-slate-2
 function ClienteElegido({ cliente, onQuitar, detalle }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <AvatarCliente cliente={cliente} className="h-9 w-9" emojiClassName="text-lg" />
+      <AvatarCliente cliente={cliente} className="h-9 w-9" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-slate-800">
           {cliente.nombre} {cliente.apellido}
@@ -74,7 +76,7 @@ function ClienteElegido({ cliente, onQuitar, detalle }) {
 }
 
 export default function TerminalPOS() {
-  const { productos, clientes, categorias, ventas, registrarVenta, aprobarCobroEspera, anularVenta, notify, session, config } = useKiosco()
+  const { productos, clientes, categorias, ventas, registrarVenta, aprobarCobroEspera, anularVenta, notify, session, config, encargos, entregarEncargo } = useKiosco()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('Todas')
   const [cart, setCart] = useState(() => {
@@ -98,6 +100,7 @@ export default function TerminalPOS() {
   const [scanOpen, setScanOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false) // ticket desplegado (mobile)
   const [esperaOpen, setEsperaOpen] = useState(false)
+  const [encargosSel, setEncargosSel] = useState(null) // {encargos:[], retiradoPor} vinculado al cobro
   const [cobroOpen, setCobroOpen] = useState(false) // modal obligatorio antes de asentar la venta
 
   // Límite de cuenta corriente vigente: el tope propio del cliente si lo
@@ -190,6 +193,7 @@ export default function TerminalPOS() {
     () => ventas.filter((v) => v.estado === 'en_espera_transferencia' && !v.anulada),
     [ventas]
   )
+
   const cantItems = cart.reduce((s, i) => s + i.cantidad, 0)
 
   const limpiarTicket = () => {
@@ -200,6 +204,7 @@ export default function TerminalPOS() {
     setBuscarCliente(false)
     setSheetOpen(false)
     setCobroOpen(false)
+    setEncargosSel(null)
   }
 
   // Vacío explícito: única vía, junto con una venta confirmada, para
@@ -219,8 +224,23 @@ export default function TerminalPOS() {
         vendedor: session?.nombre || 'mostrador',
         excepcionFiado,
         enEspera: enEsperaFlag,
+        retiradoPor: encargosSel?.retiradoPor || null,
+        // Retiro de encargo: la mercadería ya quedó reservada (fuera de
+        // góndola) al crear el pedido; no se vuelve a descontar.
+        reservado: !!encargosSel,
       })
       limpiarTicket()
+      // Retiro de encargo(s): al cobrarse, todas las bolsas quedan entregadas.
+      if (encargosSel) {
+        for (const e of encargosSel.encargos) {
+          try {
+            await entregarEncargo(e.id, encargosSel.retiradoPor)
+          } catch {
+            /* ya cerrado: no bloquea la venta */
+          }
+        }
+        setEncargosSel(null)
+      }
       if (enEsperaFlag) {
         notify(`Venta en espera · ${money(venta.total)}. Aprobala cuando impacte la transferencia.`, 'info')
       } else {
@@ -248,6 +268,10 @@ export default function TerminalPOS() {
     if (busy) return
     if (!config.abierto) return notify('Kiosco cerrado: no se pueden registrar ventas.', 'warn')
     if (!cart.length) return notify('El carrito está vacío.', 'warn')
+    if (metodo === 'saldo' && !clienteSel) return notify('Pagar con billetera exige seleccionar un cliente registrado.', 'warn')
+    if (metodo === 'saldo' && clienteSel && (clienteSel.saldo || 0) < total) {
+      return notify(`Saldo insuficiente: tiene ${money(clienteSel.saldo || 0)} y el ticket es ${money(total)}.`, 'warn')
+    }
     if (metodo === 'fiado' && !clienteSel) return notify('La cuenta corriente exige seleccionar un cliente registrado.', 'warn')
     if (metodo === 'fiado' && clienteSel && limiteFiado <= 0 && !(clienteSel.saldo > 0)) {
       return notify('El cliente no tiene saldo ni límite de cuenta corriente habilitado.', 'warn')
@@ -288,17 +312,12 @@ export default function TerminalPOS() {
     }
   }
 
-  // Carga un pedido express (QR del cliente): setea cliente + carrito, método fiado.
-  const cargarPedidoQR = (data) => {
-    const cliente = clientes.find((a) => a.id === data.clienteId)
-    if (!cliente) return notify('El QR no corresponde a un cliente registrado.', 'error')
-    if (!Array.isArray(data.items) || !data.items.length) return notify('El pedido está vacío.', 'warn')
-
-    // Consolida por productoId: si el pedido repite un ítem, la suma total
-    // no puede superar el stock disponible.
+  // Consolida ítems [{p, c}] del QR contra stock disponible y arma el
+  // carrito. Devuelve el carrito o null si nada quedó válido.
+  const carritoDesdeQR = (itemsQR) => {
     const acumulado = new Map()
     const omitidos = []
-    for (const it of data.items) {
+    for (const it of itemsQR) {
       const p = productos.find((x) => x.id === it.p)
       if (!p) { omitidos.push(`#${it.p}`); continue }
       acumulado.set(p.id, (acumulado.get(p.id) || 0) + Math.max(0, Number(it.c) || 0))
@@ -313,22 +332,96 @@ export default function TerminalPOS() {
         if (cant < pedida) omitidos.push(`${p.nombre} (parcial)`)
       }
     }
-    if (!nuevoCart.length) return notify('Ningún producto del pedido tiene stock disponible.', 'warn')
+    if (!nuevoCart.length) return { cart: null, omitidos }
+    return { cart: nuevoCart, omitidos }
+  }
+
+  // Carga un pedido express (QR del cliente o de un invitado). Si el QR
+  // no trae clienteId, la venta corre como "Consumidor Final".
+  const cargarPedidoQR = (data) => {
+    const cliente = data.clienteId ? clientes.find((a) => a.id === data.clienteId) : null
+    if (data.clienteId && !cliente) return notify('El QR no corresponde a un cliente registrado.', 'error')
+    if (!Array.isArray(data.items) || !data.items.length) return notify('El pedido está vacío.', 'warn')
+
+    const { cart: nuevoCart, omitidos } = carritoDesdeQR(data.items)
+    if (!nuevoCart) return notify('Ningún producto del pedido tiene stock disponible.', 'warn')
 
     setCart(nuevoCart)
     setClienteSel(cliente)
-    setMetodo('fiado')
+    setEncargosSel(null)
+    // Invitado → contado; cliente registrado → propone fiado (editable).
+    setMetodo(cliente ? 'fiado' : 'efectivo')
     setQCliente('')
     setScanOpen(false)
     if (omitidos.length) notify(`Sin stock completo: ${omitidos.join(', ')}.`, 'warn')
-    notify(`Pedido de ${data.nombre || cliente.nombre} cargado · ${nuevoCart.length} producto(s).`)
+    notify(
+      cliente
+        ? `Pedido de ${data.nombre || cliente.nombre} cargado · ${nuevoCart.length} producto(s).`
+        : `Pedido express cargado · Consumidor Final · Venta Libre (${nuevoCart.length} producto(s)).`
+    )
   }
+
+  // QR de retiro de encargo: vincula el cobro a los encargos para
+  // cerrarlos cuando la venta se confirme. El stock ya está reservado,
+  // así que la venta no lo vuelve a validar contra góndola.
+  // Acepta `encargoIds` (QR multi-pedido del cliente) o `encargoId` suelto.
+  const cargarEncargoQR = (data, retiradoPorHint = null) => {
+    const ids = Array.isArray(data.encargoIds) && data.encargoIds.length
+      ? data.encargoIds
+      : [data.encargoId]
+    const elegidos = []
+    for (const id of ids) {
+      const encargo = (encargos || []).find((e) => e.id === id)
+      if (!encargo) return notify('El QR no corresponde a un encargo vigente.', 'error')
+      if (encargo.estado === 'entregado' || encargo.estado === 'cancelado') {
+        return notify(`El pedido #${encargo.id.slice(0, 8).toUpperCase()} ya fue entregado o cancelado.`, 'warn')
+      }
+      if (encargo.estado === 'en_preparacion') {
+        return notify(`La bolsa #${encargo.id.slice(0, 8).toUpperCase()} todavía se está preparando: marcala "lista" primero.`, 'warn')
+      }
+      elegidos.push(encargo)
+    }
+    const cliente = clientes.find((a) => a.id === elegidos[0].clienteId) || null
+    // El carrito sale de los encargos guardados (post-ajustes), no del
+    // QR: así respeta los faltantes descontados al armar las bolsas.
+    const acumulado = new Map()
+    for (const e of elegidos) {
+      for (const i of e.items) {
+        acumulado.set(i.productoId, (acumulado.get(i.productoId) || 0) + i.cantidad)
+      }
+    }
+    const nuevoCart = [...acumulado].map(([productoId, cantidad]) => ({ productoId, cantidad }))
+    if (!nuevoCart.length) return notify('El pedido está vacío.', 'warn')
+
+    const retiradoPor = retiradoPorHint || `${elegidos[0].clienteNombre} (titular · QR)`
+    setCart(nuevoCart)
+    setClienteSel(cliente)
+    setEncargosSel({ encargos: elegidos, retiradoPor })
+    setMetodo('efectivo')
+    setQCliente('')
+    setScanOpen(false)
+    const refs = elegidos.map((e) => `#${e.id.slice(0, 8).toUpperCase()}`).join(', ')
+    notify(`Retiro de ${elegidos.length > 1 ? 'encargos' : 'encargo'} ${refs} · retira ${retiradoPor}. Cobrá para entregar.`)
+  }
+
+  // "Cobrar en caja" desde la vista Encargos: llega el id del pedido
+  // listo y se carga directo en el ticket.
+  useEffect(() => {
+    const onCobrar = (ev) => {
+      const encargoId = ev.detail?.encargoId
+      if (encargoId) cargarEncargoQR({ encargoId })
+    }
+    window.addEventListener('yapa:cobrar-encargo', onCobrar)
+    return () => window.removeEventListener('yapa:cobrar-encargo', onCobrar)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [encargos, clientes])
 
   // La cámara distingue QR de pedido (JSON) vs código de barras de producto.
   const procesarEscaneo = (text) => {
     try {
       const data = JSON.parse(text)
       if (data?.tipo === 'KIOSCO_PEDIDO') return cargarPedidoQR(data)
+      if (data?.tipo === 'ENCARGO_RETIRO') return cargarEncargoQR(data)
     } catch {
       /* no es JSON: sigue como código de barras */
     }
@@ -348,7 +441,7 @@ export default function TerminalPOS() {
         Tocá productos para agregarlos al ticket
       </p>
     ) : (
-      <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+      <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto">
         {cart.map((i) => {
           const p = productos.find((x) => x.id === i.productoId)
           if (!p) return null
@@ -381,7 +474,7 @@ export default function TerminalPOS() {
     <>
       <div>
         <p className="mb-2 text-xs font-medium text-slate-500">Método de pago *</p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {METODOS.map(({ k, label, icon: Icon, active }) => (
             <button
               key={k}
@@ -399,9 +492,32 @@ export default function TerminalPOS() {
 
       {/* Cliente: el POS opera por defecto en modo Consumidor Final /
           Venta Libre (anónima, sin datos). Asociar un cliente es opcional
-          en efectivo y transferencia; solo la cuenta corriente lo exige
-          para anotar la deuda en su libreta. */}
-      {metodo === 'fiado' ? (
+          en efectivo y transferencia; billetera y cuenta corriente lo
+          exigen (el saldo o la deuda se asientan en su libreta). */}
+      {metodo === 'saldo' ? (
+        <div className="rounded-xl border border-[#009DE0]/30 bg-[#EBF7FD] p-3">
+          {clienteSel ? (
+            <ClienteElegido
+              cliente={clienteSel}
+              onQuitar={() => setClienteSel(null)}
+              detalle={`DNI ${clienteSel.dni} · Saldo disponible ${money(clienteSel.saldo || 0)}${(clienteSel.saldo || 0) < total ? ' — insuficiente' : ''}`}
+            />
+          ) : (
+            <>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#007AB8]">
+                Cliente registrado obligatorio (usa su saldo)
+              </p>
+              <BuscadorCliente
+                q={qCliente}
+                onQ={setQCliente}
+                resultados={clientesFiltrados}
+                onSelect={setClienteSel}
+                borde="border-[#009DE0]/30"
+              />
+            </>
+          )}
+        </div>
+      ) : metodo === 'fiado' ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
           {clienteSel ? (
             <ClienteElegido
@@ -425,7 +541,7 @@ export default function TerminalPOS() {
           )}
         </div>
       ) : clienteSel ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="rounded-xl border border-transparent bg-[#F6F6F6] p-3">
           <ClienteElegido
             cliente={clienteSel}
             onQuitar={() => setClienteSel(null)}
@@ -440,7 +556,7 @@ export default function TerminalPOS() {
             </p>
             <button
               onClick={() => setBuscarCliente((v) => !v)}
-              className="shrink-0 text-xs font-semibold text-emerald-600 transition-colors hover:text-emerald-700"
+              className="shrink-0 text-xs font-semibold text-brand transition-colors hover:text-brand-dark"
             >
               {buscarCliente ? 'Ocultar' : 'Asociar cliente'}
             </button>
@@ -455,6 +571,27 @@ export default function TerminalPOS() {
               />
             </div>
           )}
+        </div>
+      )}
+
+      {metodo === 'saldo' && clienteSel && (clienteSel.saldo || 0) < total && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            Saldo insuficiente: {clienteSel.nombre} tiene {money(clienteSel.saldo || 0)} y el ticket
+            es {money(total)}. Recargale saldo o elegí otro método.
+          </span>
+        </div>
+      )}
+
+      {encargosSel && (
+        <div className="flex items-start gap-2 rounded-xl bg-[#EBF7FD] px-3 py-2.5 text-xs font-medium text-[#007AB8]">
+          <PackageCheck size={15} className="mt-0.5 shrink-0" />
+          <span>
+            Retiro de {encargosSel.encargos.length > 1 ? 'encargos' : 'encargo'}{' '}
+            {encargosSel.encargos.map((e) => `#${e.id.slice(0, 8).toUpperCase()}`).join(', ')} · retira{' '}
+            <b>{encargosSel.retiradoPor}</b>. Al cobrar queda entregado.
+          </span>
         </div>
       )}
 
@@ -489,11 +626,11 @@ export default function TerminalPOS() {
 
   const botonCobrar = (size = 'lg', className = 'w-full') => (
     <Button
-      variant={superaLimite ? 'danger' : 'success'}
+      variant={superaLimite ? 'danger' : 'primary'}
       size={size}
       onClick={abrirCobro}
       disabled={busy || !cart.length || !config.abierto}
-      className={className}
+      className={`${className} rounded-2xl py-3.5 text-base font-extrabold`}
     >
       {busy ? <Loader2 size={18} className="animate-spin" /> : <Banknote size={18} />}
       {!config.abierto ? 'Kiosco cerrado' : busy ? 'Procesando…' : `Cobrar ${money(total)}`}
@@ -501,7 +638,7 @@ export default function TerminalPOS() {
   )
 
   return (
-    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_360px]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_420px]">
       {/* Productos (padding inferior para no quedar detrás de la barra de ticket) */}
       <div className="flex min-w-0 flex-col gap-4 pb-28 xl:pb-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -511,7 +648,7 @@ export default function TerminalPOS() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar producto o código de barras…"
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              className="w-full rounded-xl border border-transparent bg-[#F6F6F6] py-2.5 pl-9 pr-3 text-sm focus:border-[#009DE0]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
             />
           </div>
           <Button variant="secondary" onClick={() => setScanOpen(true)} className="shrink-0">
@@ -525,22 +662,17 @@ export default function TerminalPOS() {
               </span>
             )}
           </Button>
-          <div className="flex gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-            {['Todas', ...categorias].map((c) => (
-              <button
-                key={c}
-                onClick={() => setCat(c)}
-                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  cat === c ? 'bg-emerald-600 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
-                }`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {/* Fila de categorías 3D pastel (estilo Wolt Groceries) */}
+        <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1" style={{ scrollBehavior: 'smooth' }}>
+          <CategoriaTile3D nombre="Todas" activo={cat === 'Todas'} onClick={() => setCat('Todas')} />
+          {categorias.map((c) => (
+            <CategoriaTile3D key={c} nombre={c} activo={cat === c} onClick={() => setCat(cat === c ? 'Todas' : c)} />
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
           {list.map((p) => {
             const agotado = p.stock <= 0
             return (
@@ -548,18 +680,18 @@ export default function TerminalPOS() {
                 key={p.id}
                 onClick={() => agregar(p)}
                 disabled={agotado || !config.abierto}
-                className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md disabled:pointer-events-none disabled:opacity-50"
+                className="group flex flex-col overflow-hidden rounded-3xl bg-white text-left shadow-soft transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lift active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
               >
                 <div className="relative">
                   <ProductoImg producto={p} className="h-36 w-full sm:h-44" iconSize={40} />
                   {enCarrito(p.id) > 0 && (
-                    <Badge tone="emerald" className="absolute right-2 top-2 shadow-sm">×{enCarrito(p.id)}</Badge>
+                    <Badge tone="brand" className="absolute right-2 top-2 shadow-sm">×{enCarrito(p.id)}</Badge>
                   )}
                 </div>
                 <div className="flex w-full flex-1 flex-col p-3">
                   <p className="text-sm font-semibold leading-snug text-slate-800">{p.nombre}</p>
                   <div className="mt-auto flex items-center justify-between pt-2">
-                    <span className="text-sm font-bold text-emerald-600">{money(p.precio)}</span>
+                    <span className="text-sm font-bold text-brand">{money(p.precio)}</span>
                     <span className={`text-[11px] ${agotado ? 'text-rose-500' : 'text-slate-400'}`}>
                       {agotado ? 'Agotado' : `stock ${p.stock}`}
                     </span>
@@ -573,10 +705,10 @@ export default function TerminalPOS() {
 
       {/* Carrito: columna lateral fija solo en pantallas grandes (xl).
           En pantallas chicas el ticket vive en la barra flotante inferior. */}
-      <aside className="hidden h-fit flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:sticky xl:top-20 xl:flex">
+      <aside className="hidden h-fit flex-col gap-5 rounded-3xl bg-white p-6 shadow-soft xl:sticky xl:top-20 xl:flex">
         <div className="flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <ShoppingCart size={16} className="text-emerald-600" /> Ticket actual
+            <ShoppingCart size={16} className="text-brand" /> Ticket actual
           </h3>
           {cart.length > 0 && (
             <button
@@ -599,14 +731,13 @@ export default function TerminalPOS() {
       </aside>
 
       {/* Barra flotante de ticket (mobile/tablet): total y cobro siempre a
-          mano sin hacer scroll; el chevron despliega el detalle. En <lg
-          queda sobre el BottomNav; en lg-xl no hay BottomNav. */}
-      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 lg:bottom-0 xl:hidden">
+          mano sin hacer scroll; el chevron despliega el detalle. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 xl:hidden">
         {sheetOpen && (
-          <div className="fade-in mx-auto max-h-[55vh] w-full max-w-lg overflow-y-auto border border-b-0 border-slate-200 bg-white px-4 py-4 shadow-[0_-10px_30px_rgba(15,23,42,0.15)]">
+          <div className="fade-in mx-auto max-h-[55vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white px-4 py-4 shadow-[0_-10px_30px_rgba(15,23,42,0.15)]">
             <div className="mb-3 flex items-center justify-between">
               <p className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <ShoppingCart size={15} className="text-emerald-600" /> Ticket actual
+                <ShoppingCart size={15} className="text-brand" /> Ticket actual
               </p>
               <div className="flex items-center gap-1">
                 {cart.length > 0 && (
@@ -631,7 +762,7 @@ export default function TerminalPOS() {
             </div>
           </div>
         )}
-        <div className="rounded-t-2xl border-t border-slate-200 bg-white/95 px-3 py-2.5 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="rounded-t-3xl bg-white/95 px-3 py-2.5 shadow-[0_-4px_20px_rgba(15,23,42,0.10)] backdrop-blur">
           <div className="mx-auto flex max-w-lg items-center gap-2">
             <button
               onClick={() => setSheetOpen((v) => !v)}
@@ -656,7 +787,7 @@ export default function TerminalPOS() {
           cancelar (botón, backdrop o Escape) conserva el carrito. */}
       <Modal open={cobroOpen} onClose={() => setCobroOpen(false)} title="Confirmar cobro">
         <div className="flex flex-col gap-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="rounded-xl border border-transparent bg-[#F6F6F6] px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-slate-500">
                 {cantItems} {cantItems === 1 ? 'ítem' : 'ítems'} · Total a cobrar
@@ -741,39 +872,70 @@ export default function TerminalPOS() {
             No hay transferencias pendientes de acreditar.
           </p>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-4">
             {enEspera.map((v) => (
-              <li key={v.id} className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-slate-500">
-                    #{v.id.slice(0, 8).toUpperCase()} · {fmtFechaHora(v.fecha)}
-                  </p>
-                  <span className="text-sm font-bold text-slate-800">{money(v.total)}</span>
+              <li key={v.id} className="overflow-hidden rounded-3xl bg-white shadow-soft">
+                {/* Encabezado: orden, estado activo y total destacado */}
+                <div className="flex items-center justify-between gap-3 bg-[#F6F6F6] px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="relative flex h-2.5 w-2.5 shrink-0">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold leading-tight text-slate-800">
+                        Orden #{v.id.slice(0, 8).toUpperCase()}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                        {fmtFechaHora(v.fecha)} · {v.clienteNombre || 'Consumidor final'} · Atendió {v.vendedor}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-lg font-bold text-brand">{money(v.total)}</span>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  {v.items.map((it) => `${it.cantidad}× ${it.nombre}`).join(' · ')}
-                </p>
-                <p className="mt-0.5 text-[11px] text-slate-400">
-                  {v.clienteNombre ? `Cliente: ${v.clienteNombre} · ` : 'Consumidor final · '}Atendió {v.vendedor}
-                </p>
-                <div className="mt-3 flex gap-2">
+
+                {/* Ítems con foto y cantidad */}
+                <ul className="flex flex-col divide-y divide-slate-50 px-4">
+                  {v.items.map((it) => {
+                    const p = productos.find((x) => x.id === it.productoId)
+                    return (
+                      <li key={`${v.id}-${it.productoId || it.nombre}`} className="flex items-center gap-3 py-2.5">
+                        {p ? (
+                          <ProductoImg producto={p} className="h-10 w-10 rounded-lg" iconSize={16} />
+                        ) : (
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                            <ShoppingCart size={16} />
+                          </span>
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-slate-700">{it.nombre}</span>
+                          <span className="text-[11px] text-slate-400">{money(it.precio)} c/u</span>
+                        </span>
+                        <Badge tone="brand" className="shrink-0 rounded-full">{it.cantidad}×</Badge>
+                        <span className="w-16 shrink-0 text-right text-sm font-semibold text-slate-700">
+                          {money(it.precio * it.cantidad)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+
+                {/* Acciones */}
+                <div className="flex gap-2 px-4 pb-4 pt-3">
                   <Button
-                    variant="success"
-                    size="sm"
-                    className="flex-1"
+                    className="flex-1 rounded-2xl py-3 text-sm font-bold"
                     disabled={busy}
                     onClick={() => resolverEspera(v, true)}
                   >
-                    <CheckCircle2 size={14} /> Aprobar cobro
+                    <CheckCircle2 size={16} /> Aprobar cobro
                   </Button>
                   <Button
                     variant="secondary"
-                    size="sm"
                     disabled={busy}
                     onClick={() => resolverEspera(v, false)}
-                    className="text-rose-500"
+                    className="rounded-2xl bg-rose-50 text-rose-500 hover:bg-rose-100"
                   >
-                    <Trash2 size={13} /> Cancelar operación
+                    <Trash2 size={14} /> Cancelar
                   </Button>
                 </div>
               </li>
@@ -781,6 +943,7 @@ export default function TerminalPOS() {
           </ul>
         )}
       </Modal>
+
 
       {/* Excepción de límite de cuenta corriente. Cancelar vuelve al modal
           de cobro con el carrito intacto. */}

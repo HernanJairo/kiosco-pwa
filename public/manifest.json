@@ -1,15 +1,19 @@
 {
-  "name": "Kiosco App — Kiosco Escolar",
-  "short_name": "Kiosco App",
+  "name": "Yapa — Kiosco Escolar",
+  "short_name": "Yapa",
   "description": "Gestión integral del kiosco escolar: catálogo, ventas, fiados, vencimientos y reportes.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ecfdf5",
-  "theme_color": "#059669",
+  "background_color": "#F8FAFC",
+  "theme_color": "#009DE0",
   "lang": "es",
-  "categories": ["education", "food", "shopping"],
+  "categories": [
+    "education",
+    "food",
+    "shopping"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",

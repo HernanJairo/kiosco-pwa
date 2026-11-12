@@ -35,7 +35,7 @@ export default function ClientesAdmin() {
   const list = ranking.filter(
     (c) =>
       (!soloDeuda || c.deuda > 0) &&
-      incluye(`${c.nombre} ${c.apellido} ${c.dni} ${c.telefono || ''}`, q)
+      incluye(`${c.nombre} ${c.apellido} ${c.dni} ${c.telefono || ''} ${c.email || ''}`, q)
   )
 
   const deudaTotal = clientes.reduce((s, c) => s + c.deuda, 0)
@@ -107,7 +107,7 @@ export default function ClientesAdmin() {
             label="Deuda total de fiados"
             value={money(deudaTotal)}
             sub={soloDeuda ? 'Clic para ver todos' : undefined}
-            className={!soloDeuda ? 'ring-2 ring-emerald-300' : ''}
+            className={!soloDeuda ? 'ring-2 ring-brand/40' : ''}
           />
         </button>
         <button type="button" onClick={() => setSoloDeuda((v) => !v)} className="text-left" title={soloDeuda ? 'Quitar filtro' : 'Filtrar solo con deuda'}>
@@ -126,7 +126,7 @@ export default function ClientesAdmin() {
             tone="emerald"
             label="Saldo total en billeteras"
             value={money(saldoTotal)}
-            className={!soloDeuda ? 'ring-2 ring-emerald-300' : ''}
+            className={!soloDeuda ? 'ring-2 ring-brand/40' : ''}
           />
         </button>
       </div>
@@ -149,7 +149,7 @@ export default function ClientesAdmin() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar por nombre, DNI o teléfono…"
-              className="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-emerald-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
+              className="w-full rounded-lg border border-transparent bg-[#F6F6F6] py-2 pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
             />
           </div>
           <Button size="sm" onClick={() => setAltaOpen(true)} className="shrink-0">
@@ -162,7 +162,7 @@ export default function ClientesAdmin() {
         ) : (
           <ul className="flex flex-col gap-2">
             {list.map((c, idx) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
+              <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-white shadow-soft px-4 py-3">
                 <div className="flex w-8 justify-center">
                   {c.deuda > 0 && idx < 3 ? (
                     <Medal size={18} className={MEDAL[idx]} />
@@ -172,9 +172,10 @@ export default function ClientesAdmin() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-800">{c.nombre} {c.apellido}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="truncate text-xs text-slate-400">
                     DNI {c.dni}
                     {c.telefono ? ` · +${telefonoInternacional(c.telefono)}` : ' · Sin teléfono'}
+                    {c.email ? ` · ${c.email}` : ''}
                   </p>
                 </div>
                 <Badge tone="emerald">Saldo {money(c.saldo)}</Badge>
@@ -194,7 +195,7 @@ export default function ClientesAdmin() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Compartir acceso por WhatsApp"
-                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand/20 bg-brand-soft px-2.5 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-blue-100"
                   >
                     <MessageCircle size={13} /> <span className="hidden sm:inline">WhatsApp</span>
                   </a>
@@ -373,7 +374,7 @@ function FormResetPin({ cliente, resetearPinCliente, notify, onClose }) {
   )
 }
 
-const ALTA_INIT = { nombre: '', apellido: '', dni: '', telefono: '', pin: '', limiteFiado: '0' }
+const ALTA_INIT = { nombre: '', apellido: '', dni: '', telefono: '', email: '', pin: '', limiteFiado: '0' }
 
 // Formulario de alta comercial. Se remonta en cada apertura, así el
 // estado queda limpio. Tras crear ofrece compartir el acceso por WhatsApp.
@@ -393,6 +394,7 @@ function FormNuevoCliente({ crearCliente, config, notify, onClose }) {
         apellido: form.apellido,
         dni: form.dni,
         telefono: form.telefono,
+        email: form.email,
         pin: form.pin,
         limiteFiado: Number(form.limiteFiado) || 0,
       })
@@ -421,7 +423,7 @@ function FormNuevoCliente({ crearCliente, config, notify, onClose }) {
           href={waLink(creado.telefono || '', textoAccesoCliente({ cliente: creado }))}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-base font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark"
         >
           <MessageCircle size={17} /> Compartir Acceso por WhatsApp
         </a>
@@ -466,6 +468,13 @@ function FormNuevoCliente({ crearCliente, config, notify, onClose }) {
         label="Teléfono / WhatsApp del cliente"
         value={form.telefono}
         onChange={(v) => setForm((f) => ({ ...f, telefono: v }))}
+      />
+      <Input
+        label="Correo electrónico (opcional)"
+        type="email"
+        placeholder="cliente@correo.com · también sirve para ingresar"
+        value={form.email}
+        onChange={set('email')}
       />
       <Input
         label="Límite de cuenta corriente propio ($ · opcional)"

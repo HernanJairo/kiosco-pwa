@@ -66,9 +66,9 @@ export const APP_URL = 'https://kiosco-pwa.vercel.app'
 // Mensaje prearmado del botón "Compartir Acceso por WhatsApp": el
 // mostrador le envía al cliente su DNI (usuario) y la clave inicial.
 export const textoAccesoCliente = ({ cliente }) =>
-  `¡Hola ${cliente.nombre}! Tu cuenta en KioscoApp está lista. Tu DNI es ${cliente.dni} y tu clave inicial es ${cliente.pin}.`
+  `¡Hola ${cliente.nombre}! Tu cuenta en Yapa está lista. Tu DNI es ${cliente.dni} y tu clave inicial es ${cliente.pin}.`
 
 // Mensaje prearmado del flujo "¿Olvidaste tu PIN?": el usuario lo envía al
 // chat oficial del kiosco para pedir el restablecimiento asistido.
 export const textoResetPin = ({ nombre, identificador }) =>
-  `Hola! Soy ${nombre}, solicito restablecer mi PIN de acceso para KioscoApp (DNI: ${identificador}).`
+  `Hola! Soy ${nombre}, solicito restablecer mi PIN de acceso para Yapa (DNI: ${identificador}).`

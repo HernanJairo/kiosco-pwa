@@ -1,7 +1,7 @@
 import { avatarDe, fondoAvatar } from '../../utils/avatares'
 
-// Muestra la foto (DataURL), el avatar (emoji) o las iniciales del cliente.
-export default function AvatarCliente({ cliente: a, className = 'h-10 w-10', emojiClassName = 'text-xl', textoClassName = 'text-xs' }) {
+// Muestra la foto (DataURL), el avatar (ícono vectorial) o las iniciales del cliente.
+export default function AvatarCliente({ cliente: a, className = 'h-10 w-10', textoClassName = 'text-xs', iconSize = 20 }) {
   if (!a) return null
   if (a.foto) {
     return (
@@ -14,12 +14,13 @@ export default function AvatarCliente({ cliente: a, className = 'h-10 w-10', emo
   }
   const av = avatarDe(a.avatar)
   if (av) {
+    const Icon = av.icon
     return (
       <div
         className={`flex shrink-0 items-center justify-center rounded-full ${fondoAvatar(a.avatar)} ${className}`}
         title={av.nombre}
       >
-        <span className={emojiClassName}>{av.emoji}</span>
+        <Icon size={iconSize} strokeWidth={2} />
       </div>
     )
   }

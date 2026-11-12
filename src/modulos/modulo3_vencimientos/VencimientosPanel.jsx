@@ -60,20 +60,21 @@ export default function VencimientosPanel() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <CalendarClock size={16} className="text-slate-400" />
         {[
-          { k: 'todos', label: `Todos (${evaluados.length})` },
-          { k: 'rojo', label: `🔴 Críticos (${conteos.rojo || 0})` },
-          { k: 'amarillo', label: `🟡 Preventivos (${conteos.amarillo || 0})` },
-          { k: 'verde', label: `🟢 Óptimos (${conteos.verde || 0})` },
+          { k: 'todos', label: `Todos (${evaluados.length})`, dot: null },
+          { k: 'rojo', label: `Críticos (${conteos.rojo || 0})`, dot: 'bg-rose-500' },
+          { k: 'amarillo', label: `Preventivos (${conteos.amarillo || 0})`, dot: 'bg-amber-400' },
+          { k: 'verde', label: `Óptimos (${conteos.verde || 0})`, dot: 'bg-emerald-500' },
         ].map((f) => (
           <button
             key={f.k}
             onClick={() => setFiltro(f.k)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition-all duration-200 ease-out active:scale-95 ${
               filtro === f.k
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'border border-slate-200 bg-white text-slate-600 hover:border-emerald-300'
+                ? 'bg-[#009DE0] text-white shadow-sm'
+                : 'bg-[#F6F6F6] text-slate-600 hover:bg-[#EBF7FD] hover:text-[#007AB8]'
             }`}
           >
+            {f.dot && <span className={`h-2 w-2 rounded-full ${f.dot}`} />}
             {f.label}
           </button>
         ))}
