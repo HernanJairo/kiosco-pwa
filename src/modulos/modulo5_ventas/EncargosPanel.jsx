@@ -47,9 +47,15 @@ export default function EncargosPanel() {
     ejecutar(() => ajustarItemEncargo(e.id, productoId, cantidad))
 
   // Despacho directo: lleva el pedido listo al ticket del POS para cobrar.
+  // El POS está desmontado en esta pestaña: el id viaja por sessionStorage
+  // (lo levanta TerminalPOS al montar) y el evento queda como atajo por si
+  // ya estuviera visible en pantallas divididas.
   const cobrarEnCaja = (e) => {
-    window.dispatchEvent(new CustomEvent('yapa:cobrar-encargo', { detail: { encargoId: e.id } }))
+    try {
+      sessionStorage.setItem('yapa_cobrar_encargo', e.id)
+    } catch { /* storage bloqueado: queda solo el evento */ }
     window.dispatchEvent(new CustomEvent('yapa:nav', { detail: 'pos' }))
+    window.dispatchEvent(new CustomEvent('yapa:cobrar-encargo', { detail: { encargoId: e.id } }))
     notify(`Pedido #${e.id.slice(0, 8).toUpperCase()} enviado a caja para cobrar.`, 'info')
   }
 

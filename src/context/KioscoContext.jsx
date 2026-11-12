@@ -421,8 +421,18 @@ export function KioscoProvider({ children }) {
   const eliminarCliente = async (clienteId) => {
     await sleep()
     const eliminado = ops.eliminarClienteDb(clone(db), clienteId) // valida antes de mutar
-    mutate((n) => ops.eliminarClienteDb(n, clienteId))
+    let descartadas = []
+    mutate((n) => {
+      ops.eliminarClienteDb(n, clienteId)
+      // Las solicitudes pendientes que se descartaron en el borrador
+      // también deben subirse: si no, onSnapshot las "resucita" en la
+      // bandeja aunque el cliente ya no exista.
+      descartadas = (n.solicitudes || []).filter(
+        (s) => s.clienteId === clienteId && s.estado === 'descartada'
+      )
+    })
     sync(fs.borrarCliente(clienteId))
+    for (const s of descartadas) sync(fs.upsertSolicitud(s))
     return eliminado
   }
 

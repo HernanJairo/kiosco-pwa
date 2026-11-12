@@ -421,13 +421,22 @@ export default function TerminalPOS() {
   }
 
   // "Cobrar en caja" desde la vista Encargos: llega el id del pedido
-  // listo y se carga directo en el ticket.
+  // listo y se carga directo en el ticket. Dos vías: el evento en vivo
+  // (POS ya montado) y el handoff por sessionStorage para cuando esta
+  // vista recién se monta tras la navegación (el evento ya había pasado).
   useEffect(() => {
     const onCobrar = (ev) => {
       const encargoId = ev.detail?.encargoId
       if (encargoId) cargarEncargoQR({ encargoId })
     }
     window.addEventListener('yapa:cobrar-encargo', onCobrar)
+    try {
+      const pendiente = sessionStorage.getItem('yapa_cobrar_encargo')
+      if (pendiente) {
+        sessionStorage.removeItem('yapa_cobrar_encargo')
+        cargarEncargoQR({ encargoId: pendiente })
+      }
+    } catch { /* storage bloqueado: solo el evento en vivo */ }
     return () => window.removeEventListener('yapa:cobrar-encargo', onCobrar)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encargos, clientes])
