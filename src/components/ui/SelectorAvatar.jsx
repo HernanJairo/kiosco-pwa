@@ -6,14 +6,14 @@ import { archivoADataURL } from '../../utils/imagen'
 import Button from './Button'
 
 // Grilla de avatares emoji + opción de foto real (comprimida a Base64).
-// Guarda la elección en alumno.avatar / alumno.foto.
-export default function SelectorAvatar({ alumno }) {
-  const { updateAlumno, notify } = useKiosco()
+// Guarda la elección en cliente.avatar / cliente.foto.
+export default function SelectorAvatar({ cliente }) {
+  const { updateCliente, notify } = useKiosco()
   const camRef = useRef(null)
   const galRef = useRef(null)
 
   const elegir = async (k) => {
-    await updateAlumno(alumno.id, { avatar: k, foto: null })
+    await updateCliente(cliente.id, { avatar: k, foto: null })
     notify('¡Avatar actualizado!')
   }
 
@@ -24,7 +24,7 @@ export default function SelectorAvatar({ alumno }) {
     if (!file.type.startsWith('image/')) return notify('El archivo debe ser una imagen.', 'warn')
     try {
       const foto = await archivoADataURL(file)
-      await updateAlumno(alumno.id, { foto })
+      await updateCliente(cliente.id, { foto })
       notify('Foto de perfil actualizada.')
     } catch (err) {
       notify(err.message, 'error')
@@ -32,11 +32,11 @@ export default function SelectorAvatar({ alumno }) {
   }
 
   const quitarFoto = async () => {
-    await updateAlumno(alumno.id, { foto: null })
+    await updateCliente(cliente.id, { foto: null })
     notify('Foto eliminada: se usa tu avatar.', 'info')
   }
 
-  const selAvatar = !alumno.foto ? avatarDe(alumno.avatar) : null
+  const selAvatar = !cliente.foto ? avatarDe(cliente.avatar) : null
 
   return (
     <div className="flex flex-col gap-4">
@@ -74,7 +74,7 @@ export default function SelectorAvatar({ alumno }) {
         <Button type="button" variant="secondary" size="sm" onClick={() => galRef.current?.click()}>
           <Image size={14} /> Galería
         </Button>
-        {alumno.foto && (
+        {cliente.foto && (
           <Button type="button" variant="ghost" size="sm" className="text-rose-500 hover:bg-rose-50" onClick={quitarFoto}>
             <Trash2 size={14} /> Quitar foto
           </Button>

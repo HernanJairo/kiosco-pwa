@@ -63,26 +63,12 @@ export const textoComprobante = ({ monto, nombre, dni }) =>
 
 export const APP_URL = 'https://kiosco-pwa.vercel.app'
 
-export const textoAcceso = ({ alumno, tutor, config }) => {
-  const usuarioTutor = tutor
-    ? tutor.usuario || telefonoInternacional(tutor.telefono) || tutor.dni || '-'
-    : null
-  return (
-    `Hola${tutor ? ` ${tutor.nombre}` : ''}! Registramos a ${alumno.nombre} ${alumno.apellido} en ${config?.nombreKiosco || 'el kiosco'}.\n` +
-    `Acceso ALUMNO → Usuario (DNI): ${alumno.dni} · PIN: ${alumno.pin}\n` +
-    (tutor
-      ? `Podés consultar sus gastos, saldos y autorizar transferencias ingresando como TUTOR con tu Usuario: ${usuarioTutor} y PIN inicial: ${tutor.pin || '1234'} en ${APP_URL}`
-      : `Ingresá acá: ${APP_URL}`)
-  )
-}
-
-export const textoTutor = ({ tutor, hijos = [], config }) =>
-  `Hola ${tutor.nombre}! Ya está habilitada tu cuenta de tutor/a en ${config?.nombreKiosco || 'el kiosco escolar'}.\n` +
-  `Hijos a cargo: ${hijos.length ? hijos.map((h) => `${h.nombre} ${h.apellido} (${h.curso})`).join(', ') : 'a confirmar en mostrador'}\n` +
-  `Usuario: ${tutor.dni || tutor.usuario || telefonoInternacional(tutor.telefono) || '-'}\nPIN: ${tutor.pin}\n` +
-  `Ingresá acá: ${APP_URL}`
+// Mensaje prearmado del botón "Compartir Acceso por WhatsApp": el
+// mostrador le envía al cliente su DNI (usuario) y la clave inicial.
+export const textoAccesoCliente = ({ cliente }) =>
+  `¡Hola ${cliente.nombre}! Tu cuenta en KioscoApp está lista. Tu DNI es ${cliente.dni} y tu clave inicial es ${cliente.pin}.`
 
 // Mensaje prearmado del flujo "¿Olvidaste tu PIN?": el usuario lo envía al
 // chat oficial del kiosco para pedir el restablecimiento asistido.
 export const textoResetPin = ({ nombre, identificador }) =>
-  `Hola! Soy ${nombre}, solicito restablecer mi PIN de acceso para KioscoApp (DNI/Tel: ${identificador}).`
+  `Hola! Soy ${nombre}, solicito restablecer mi PIN de acceso para KioscoApp (DNI: ${identificador}).`

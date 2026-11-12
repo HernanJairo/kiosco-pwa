@@ -45,7 +45,7 @@ const enRango = (iso, rango, desde, hasta) => {
 }
 
 export default function Dashboard() {
-  const { ventas, alumnos, productos } = useKiosco()
+  const { ventas, clientes, productos } = useKiosco()
   const [rango, setRango] = useState('hoy')
   const [desde, setDesde] = useState(hoyISO())
   const [hasta, setHasta] = useState(hoyISO())
@@ -79,10 +79,10 @@ export default function Dashboard() {
       ganancia,
       top3: ranking.slice(0, 3),
       top10: ranking.slice(0, 10),
-      capitalFiados: alumnos.reduce((s, a) => s + a.deuda, 0),
+      capitalFiados: clientes.reduce((s, a) => s + a.deuda, 0),
       criticos: productos.filter((p) => p.stock < p.stockMin).length,
     }
-  }, [ventas, alumnos, productos, rango, desde, hasta])
+  }, [ventas, clientes, productos, rango, desde, hasta])
 
   const maxTop = Math.max(1, ...stats.top10.map((t) => t.cant))
   const periodo = RANGO_TXT[rango]

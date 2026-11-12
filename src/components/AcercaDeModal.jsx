@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BadgeCheck, Database, RefreshCw, School } from 'lucide-react'
+import { BadgeCheck, Database, RefreshCw, Store } from 'lucide-react'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import Logo from '../assets/logo'
@@ -59,8 +59,8 @@ export default function AcercaDeModal({ open, onClose }) {
             Datos locales persistentes con sincronización remota opcional
           </li>
           <li className="flex items-center gap-2 text-xs text-slate-600">
-            <School size={14} className="shrink-0 text-amber-500" />
-            Desarrollado para Escuela N°12 Gral. San Martín
+            <Store size={14} className="shrink-0 text-amber-500" />
+            Punto de venta con cuenta corriente para clientes
           </li>
         </ul>
 

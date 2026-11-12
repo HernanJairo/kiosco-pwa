@@ -13,7 +13,7 @@ const esPinDefault = (pin, dni) =>
 
 // Banner sutil y descartable de primer ingreso: invita a cambiar el PIN
 // por uno propio de 4 dígitos. `onGuardar` recibe el PIN nuevo y debe
-// persistirlo (updateAlumno / updateTutor).
+// persistirlo (updateCliente).
 export default function BannerPinSeguridad({ pin, dni, onGuardar }) {
   const { notify } = useKiosco()
   const [dismissed, setDismissed] = useState(false)

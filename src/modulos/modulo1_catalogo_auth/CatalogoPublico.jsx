@@ -10,13 +10,13 @@ import ProductoImg from '../../components/ui/ProductoImg'
 import PedidoQRModal from '../modulo4_clientes/PedidoQRModal'
 
 export default function CatalogoPublico() {
-  const { productos, categorias, session, alumnoSesion } = useKiosco()
+  const { productos, categorias, session, clienteSesion } = useKiosco()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('Todas')
-  const [pedido, setPedido] = useState([]) // {productoId, cantidad} — solo rol alumno
+  const [pedido, setPedido] = useState([]) // {productoId, cantidad} — solo rol cliente
   const [qrOpen, setQrOpen] = useState(false)
 
-  const esAlumno = session?.rol === 'alumno'
+  const esCliente = session?.rol === 'cliente'
 
   const list = useMemo(
     () =>
@@ -109,7 +109,7 @@ export default function CatalogoPublico() {
                     )}
                   </div>
                 </div>
-                {esAlumno && (
+                {esCliente && (
                   <div className="px-4 pb-4">
                     {cant === 0 ? (
                       <Button
@@ -146,7 +146,7 @@ export default function CatalogoPublico() {
       )}
 
       {/* Barra flotante del pedido express */}
-      {esAlumno && pedido.length > 0 && (
+      {esCliente && pedido.length > 0 && (
         <div className="pop-in fixed inset-x-0 bottom-16 z-30 px-4 lg:bottom-6">
           <div className="mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white/95 p-3 shadow-lg backdrop-blur">
             <div className="min-w-0 px-1">
@@ -160,7 +160,7 @@ export default function CatalogoPublico() {
         </div>
       )}
 
-      <PedidoQRModal alumno={alumnoSesion} items={itemsDetalle} open={qrOpen} onClose={() => setQrOpen(false)} />
+      <PedidoQRModal cliente={clienteSesion} items={itemsDetalle} open={qrOpen} onClose={() => setQrOpen(false)} />
     </div>
   )
 }

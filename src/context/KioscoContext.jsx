@@ -3,12 +3,11 @@ import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import { buildSeed, CATEGORIAS } from './seedData'
 import { firebaseLista } from '../firebase/firebaseConfig'
 import * as fs from '../firebase/firestoreService'
-import { telefonoInternacional } from '../utils/whatsapp'
-import { tutorExistente, tutorPorIdentificador } from '../utils/acceso'
+import * as ops from './operaciones'
 import { money } from '../utils/format'
 
-const DB_KEY = 'kiosco_db_v1'
-const SES_KEY = 'kiosco_session_v1'
+const DB_KEY = 'kiosco_db_v2'
+const SES_KEY = 'kiosco_session_v2'
 
 // ==== Persistencia remota (opcional, plug & play) ====
 // true → intenta sincronizar con Firestore cuando las credenciales de
@@ -18,14 +17,13 @@ const USE_FIREBASE = false
 
 const sleep = (ms = 160) => new Promise((r) => setTimeout(r, ms))
 const clone = (o) => JSON.parse(JSON.stringify(o))
-const uid = () =>
-  typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : 'id-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8)
+const uid = ops.uid
 
 const KioscoContext = createContext(null)
 // eslint-disable-next-line react/only-export-components
 export const useKiosco = () => useContext(KioscoContext)
+
+const ROLES_VALIDOS = ['cliente', 'vendedor', 'admin']
 
 function loadDB() {
   try {
@@ -35,8 +33,9 @@ function loadDB() {
       const seed = buildSeed()
       // Rellena campos nuevos de config (whatsapp, aliasPago...) en bases viejas
       parsed.config = { ...seed.config, ...(parsed.config || {}) }
+      if (!Array.isArray(parsed.clientes)) parsed.clientes = seed.clientes
       if (!Array.isArray(parsed.staff)) parsed.staff = seed.staff
-      if (!Array.isArray(parsed.pagosPendientes)) parsed.pagosPendientes = []
+      if (!Array.isArray(parsed.solicitudes)) parsed.solicitudes = []
       if (!Array.isArray(parsed.notificaciones)) parsed.notificaciones = []
       return parsed
     }
@@ -47,7 +46,8 @@ function loadDB() {
 }
 function loadSession() {
   try {
-    return JSON.parse(localStorage.getItem(SES_KEY))
+    const s = JSON.parse(localStorage.getItem(SES_KEY))
+    return s && ROLES_VALIDOS.includes(s.rol) ? s : null
   } catch {
     return null
   }
@@ -77,7 +77,7 @@ export function KioscoProvider({ children }) {
         setDb((prev) => {
           const n = clone(prev)
           if (productos?.length) n.productos = productos
-          if (clientes?.length) n.alumnos = clientes
+          if (clientes?.length) n.clientes = clientes
           return n
         })
       } catch (e) {
@@ -107,62 +107,24 @@ export function KioscoProvider({ children }) {
   const mutate = (fn) => setDb((prev) => { const n = clone(prev); fn(n); return n })
 
   // Registra un evento en el centro de notificaciones (campanita del
-  // TopBar). `para` es 'staff' o '<rol>:<id>' (p.ej. 'tutor:t1'); el feed
-  // se filtra según la sesión activa.
+  // TopBar). `para` es 'staff' o 'cliente:<id>'; el feed se filtra según
+  // la sesión activa.
   const avisar = (n, para, texto, tipo = 'info') => {
     if (!Array.isArray(n.notificaciones)) n.notificaciones = []
     n.notificaciones.unshift({ id: uid(), fecha: new Date().toISOString(), para, texto, tipo })
     if (n.notificaciones.length > 200) n.notificaciones.length = 200
   }
 
-  // Avisa al alumno y a su tutor (si tiene) en una sola pasada.
-  const avisarFamilia = (n, alumno, texto, tipo) => {
-    avisar(n, `alumno:${alumno.id}`, texto, tipo)
-    if (alumno.tutorId) avisar(n, `tutor:${alumno.tutorId}`, texto, tipo)
-  }
-
-  // Aplica un abono a los fiados más antiguos del alumno (in-place) y
-  // devuelve { resto, abonado }. Compartida por registrarPago/recargarSaldo
-  // y por el cálculo de saldo resultante para la sincronización remota.
-  const abonarFiados = (a, monto) => {
-    let resto = monto
-    let abonado = 0
-    const pendientes = [...a.fiados]
-      .filter((f) => !f.pagado && f.pendiente > 0)
-      .sort((x, y) => new Date(x.fecha) - new Date(y.fecha))
-    for (const f of pendientes) {
-      if (resto <= 0) break
-      const pago = Math.min(resto, f.pendiente)
-      f.pendiente -= pago
-      f.pagado = f.pendiente <= 0.009
-      if (f.pagado) f.pendiente = 0
-      resto -= pago
-      abonado += pago
-    }
-    a.deuda = a.fiados.reduce((s, f) => s + f.pendiente, 0)
-    if (resto > 0) a.saldo += resto
-    return { resto, abonado }
-  }
+  const avisarCliente = (n, cliente, texto, tipo) => avisar(n, `cliente:${cliente.id}`, texto, tipo)
 
   /* ================= AUTH ================= */
-  const loginAlumno = async (dni, pin) => {
+  const loginCliente = async (dni, pin) => {
     await sleep()
-    const a = db.alumnos.find(
+    const c = db.clientes.find(
       (x) => x.dni === String(dni).trim() && x.pin === String(pin).trim()
     )
-    if (!a) throw new Error('DNI o PIN incorrectos.')
-    const s = { rol: 'alumno', id: a.id, nombre: `${a.nombre} ${a.apellido}` }
-    setSession(s)
-    return s
-  }
-
-  // El tutor se identifica con DNI, usuario (teléfono normalizado de su
-  // alta automática) o teléfono en cualquier formato.
-  const loginTutor = async (ident, pin) => {
-    await sleep()
-    const t = tutorPorIdentificador(db.tutores, ident)
-    if (!t || t.pin !== String(pin).trim()) throw new Error('Usuario o PIN incorrectos.')
-    const s = { rol: 'tutor', id: t.id, nombre: t.nombre }
+    if (!c) throw new Error('DNI o PIN incorrectos.')
+    const s = { rol: 'cliente', id: c.id, nombre: `${c.nombre} ${c.apellido}` }
     setSession(s)
     return s
   }
@@ -210,45 +172,12 @@ export function KioscoProvider({ children }) {
   }
 
   /* ================= VENTAS / POS ================= */
-  const registrarVenta = async ({ items, metodo, alumnoId = null, vendedor = 'mostrador', excepcionFiado = false, enEspera = false }) => {
+  // Venta libre por defecto: efectivo y transferencia no exigen cliente.
+  // Solo "cuenta corriente / fiado" requiere cliente con saldo o límite.
+  const registrarVenta = async ({ items, metodo, clienteId = null, vendedor = 'mostrador', excepcionFiado = false, enEspera = false }) => {
     await sleep(220)
     if (!db.config.abierto) throw new Error('Kiosco cerrado: no se pueden registrar ventas.')
-    if (!items?.length) throw new Error('El carrito está vacío.')
-
-    // Consolida cantidades por productoId: dos líneas del mismo ítem no deben
-    // pasar individualmente el control de stock.
-    const porProducto = new Map()
-    for (const it of items) {
-      porProducto.set(it.productoId, (porProducto.get(it.productoId) || 0) + Number(it.cantidad || 0))
-    }
-    const detalle = []
-    let total = 0
-    for (const [productoId, cantidad] of porProducto) {
-      const p = db.productos.find((x) => x.id === productoId)
-      if (!p) throw new Error('Producto no encontrado.')
-      if (cantidad < 1) throw new Error('Cantidad inválida.')
-      if (p.stock < cantidad) throw new Error(`Stock insuficiente: ${p.nombre}.`)
-      detalle.push({ productoId: p.id, nombre: p.nombre, cantidad, precio: p.precio, costo: p.costo })
-      total += p.precio * cantidad
-    }
-
-    // El alumno es opcional en ventas de contado (asociar solo deja
-    // constancia en su historial); solo el fiado lo exige.
-    let alumno = null
-    if (alumnoId) alumno = db.alumnos.find((a) => a.id === alumnoId) || null
-    if (metodo === 'fiado') {
-      if (!alumno) throw new Error('Seleccioná un alumno válido para fiar.')
-      const limite = Number(db.config.limiteFiadoGlobal) || 0
-      const deudaProyectada = alumno.deuda + total
-      if (!excepcionFiado && limite > 0 && deudaProyectada > limite) {
-        const err = new Error(
-          `Límite de fiado global superado: ${alumno.nombre} quedaría debiendo $ ${deudaProyectada.toLocaleString('es-AR')} (límite $ ${limite.toLocaleString('es-AR')}).`
-        )
-        err.code = 'FIADO_LIMITE'
-        err.deudaProyectada = deudaProyectada
-        throw err
-      }
-    }
+    const { detalle, total, cliente } = ops.validarVenta(db, { items, metodo, clienteId, excepcionFiado })
 
     const venta = {
       id: uid(),
@@ -256,8 +185,8 @@ export function KioscoProvider({ children }) {
       items: detalle,
       total,
       metodo,
-      alumnoId: alumno?.id ?? null,
-      alumnoNombre: alumno ? `${alumno.nombre} ${alumno.apellido}` : null,
+      clienteId: cliente?.id ?? null,
+      clienteNombre: cliente ? `${cliente.nombre} ${cliente.apellido}` : null,
       vendedor,
       anulada: false,
       // 'completada' por defecto; 'en_espera_transferencia' cuando el
@@ -266,39 +195,15 @@ export function KioscoProvider({ children }) {
     }
 
     mutate((n) => {
-      for (const it of detalle) {
-        const p = n.productos.find((x) => x.id === it.productoId)
-        if (!p || p.stock - it.cantidad < 0) throw new Error(`Stock insuficiente: ${it.nombre}.`)
-        p.stock -= it.cantidad
-      }
-      n.ventas.unshift(venta)
-      if (alumno && metodo === 'fiado') {
-        const a = n.alumnos.find((x) => x.id === alumno.id)
-        a.deuda += total
-        a.fiados.unshift({
-          id: uid(),
-          ventaId: venta.id,
-          fecha: venta.fecha,
-          items: detalle.map((d) => ({ nombre: d.nombre, cantidad: d.cantidad, precio: d.precio })),
-          monto: total,
-          pendiente: total,
-          pagado: false,
-        })
-        a.movimientos.unshift({
-          id: uid(),
-          fecha: venta.fecha,
-          tipo: 'fiado',
-          detalle: `Compra fiada · ${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)`,
-          monto: total,
-        })
-        if (a.tutorId) {
-          avisar(
-            n,
-            `tutor:${a.tutorId}`,
-            `${a.nombre} ${a.apellido} consumió ${money(total)} en el kiosco (${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s) al fiado).`,
-            'consumo'
-          )
-        }
+      ops.aplicarVentaDb(n, { venta, detalle, metodo, clienteId: cliente?.id })
+      if (cliente && metodo === 'fiado') {
+        const c = n.clientes.find((x) => x.id === cliente.id)
+        avisarCliente(
+          n,
+          c,
+          `Compra en cuenta corriente por ${money(total)} (${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)).`,
+          'consumo'
+        )
       }
     })
     sync(fs.registrarVenta(venta))
@@ -330,35 +235,7 @@ export function KioscoProvider({ children }) {
     await sleep()
     const venta = db.ventas.find((v) => v.id === ventaId)
     if (!venta) throw new Error('Venta no encontrada.')
-    if (venta.anulada) throw new Error('La venta ya está anulada.')
-
-    mutate((n) => {
-      const v = n.ventas.find((x) => x.id === ventaId)
-      v.anulada = true
-      for (const it of v.items) {
-        const p = n.productos.find((x) => x.id === it.productoId)
-        if (p) p.stock += it.cantidad
-      }
-      if (v.metodo === 'fiado' && v.alumnoId) {
-        const a = n.alumnos.find((x) => x.id === v.alumnoId)
-        if (a) {
-          const f = a.fiados.find((x) => x.ventaId === v.id)
-          const revertir = f ? f.pendiente : v.total
-          if (f) {
-            f.pendiente = 0
-            f.pagado = true
-          }
-          a.deuda = Math.max(0, a.deuda - revertir)
-          a.movimientos.unshift({
-            id: uid(),
-            fecha: new Date().toISOString(),
-            tipo: 'anulacion',
-            detalle: `Anulación de venta fiada #${v.id.slice(0, 8).toUpperCase()}`,
-            monto: -revertir,
-          })
-        }
-      }
-    })
+    mutate((n) => ops.anularVentaDb(n, ventaId))
     sync(fs.registrarVenta({ ...venta, anulada: true }))
     for (const it of venta.items) {
       const p = db.productos.find((x) => x.id === it.productoId)
@@ -366,301 +243,194 @@ export function KioscoProvider({ children }) {
     }
   }
 
-  /* ================= ALUMNOS / TUTORES ================= */
-  // Alta administrativa de un alumno (y opcionalmente su tutor). El tutor se
-  // reutiliza si ya existe por nombre o teléfono, para agrupar hermanos.
-  const crearAlumno = async ({ nombre, apellido = '', dni, curso, pin, telefono = '', tutorNombre = '', tutorTelefono = '', limiteFiado = 10000 }) => {
+  /* ================= CLIENTES ================= */
+  // Alta de cliente: sirve para el alta administrativa del mostrador y
+  // para el auto-registro público. El DNI es único en todo el sistema.
+  const crearCliente = async ({ nombre, apellido, dni, telefono = '', pin, limiteFiado = 0 }) => {
     await sleep()
-    dni = String(dni ?? '').trim()
-    if (!String(nombre ?? '').trim()) throw new Error('Ingresá el nombre completo del alumno.')
-    if (!/^\d{6,10}$/.test(dni)) throw new Error('Ingresá un DNI válido (solo números).')
-    if (db.alumnos.some((a) => a.dni === dni)) throw new Error(`Ya existe un alumno registrado con DNI ${dni}.`)
-    if (!String(curso ?? '').trim()) throw new Error('Ingresá el curso y división.')
-
-    const pinStr = String(pin ?? '').trim()
-    const pinFinal = /^\d{4}$/.test(pinStr) ? pinStr : dni.slice(-4) || '1234'
-    const tel = telefonoInternacional(tutorTelefono)
-    const nomT = String(tutorNombre ?? '').trim()
-    const ahora = Date.now()
-
-    // Reutiliza la cuenta del tutor si ya existe por nombre o teléfono
-    // (agrupa hermanos sin duplicar al padre/madre).
-    const tutor = nomT ? tutorExistente(db.tutores, { nombre: nomT, telefono: tutorTelefono }) : null
-
-    const alumno = {
-      id: `a${ahora}`,
-      nombre: String(nombre).trim(),
-      apellido: String(apellido).trim(),
-      dni,
-      pin: pinFinal,
-      telefono: telefonoInternacional(telefono),
-      curso: String(curso).trim(),
-      tutorId: tutor?.id || (nomT ? `t${ahora}` : null),
-      saldo: 0,
-      deuda: 0,
-      avatar: '🎒',
-      limiteDiario: 0,
-      limiteFiado: Math.max(0, Number(limiteFiado) || 0),
-      fiados: [],
-      movimientos: [],
-    }
-    let tutorFinal = tutor
-    if (nomT && !tutor) {
-      // Alta automática transparente: el tutor ingresa con su teléfono
-      // como usuario y PIN inicial 1234.
-      tutorFinal = { id: alumno.tutorId, nombre: nomT, dni: '', usuario: tel, pin: '1234', telefono: tel, hijos: [alumno.id] }
-    } else if (tutor && !tutor.hijos.includes(alumno.id)) {
-      tutorFinal = { ...tutor, telefono: tel || tutor.telefono, hijos: [...tutor.hijos, alumno.id] }
-    }
-
+    const datos = { nombre, apellido, dni, telefono, pin, limiteFiado }
+    ops.validarAltaCliente(db.clientes, datos)
+    const cliente = ops.nuevoCliente(datos)
     mutate((n) => {
-      if (tutorFinal) {
-        const idx = n.tutores.findIndex((t) => t.id === tutorFinal.id)
-        if (idx >= 0) n.tutores[idx] = tutorFinal
-        else n.tutores.push(tutorFinal)
-      }
-      n.alumnos.push(alumno)
+      // Revalida sobre el borrador por si otro alta corrió en paralelo.
+      ops.validarAltaCliente(n.clientes, datos)
+      n.clientes.push(cliente)
     })
-    sync(fs.updateAlumno(alumno.id, alumno))
-    return { alumno, tutor: tutorFinal }
+    sync(fs.updateCliente(cliente.id, cliente))
+    return { cliente }
   }
 
-  // Alta de un tutor junto a sus hijos a cargo: vincula alumnos ya
-  // registrados (re-asignándolos si tenían otro tutor) y crea al vuelo los
-  // hijos que aún no existen. Devuelve { tutor, alumnos: [los creados] }.
-  const crearTutor = async ({ nombre, dni = '', telefono = '', pin = '1234', hijosExistentes = [], hijosNuevos = [] }) => {
+  // Regla de integridad: no se puede eliminar un cliente con deuda > 0.
+  const eliminarCliente = async (clienteId) => {
     await sleep()
-    nombre = String(nombre ?? '').trim()
-    dni = String(dni ?? '').replace(/\D/g, '')
-    const tel = telefonoInternacional(telefono)
-    const pinStr = String(pin ?? '').trim()
-    if (!nombre) throw new Error('Ingresá el nombre completo del tutor.')
-    if (dni && !/^\d{6,10}$/.test(dni)) throw new Error('Ingresá un DNI válido para el tutor (6 a 10 dígitos).')
-    if (dni && db.tutores.some((t) => t.dni === dni)) throw new Error(`Ya existe un tutor con DNI ${dni}.`)
-    if (!/^\d{4}$/.test(pinStr)) throw new Error('El PIN del tutor debe tener exactamente 4 dígitos.')
+    const eliminado = ops.eliminarClienteDb(clone(db), clienteId) // valida antes de mutar
+    mutate((n) => ops.eliminarClienteDb(n, clienteId))
+    return eliminado
+  }
 
-    const ids = [...new Set(hijosExistentes)].filter((id) => db.alumnos.some((a) => a.id === id))
-    const dnisNuevos = new Set()
-    for (const h of hijosNuevos) {
-      const nom = String(h.nombre ?? '').trim()
-      const hdni = String(h.dni ?? '').replace(/\D/g, '')
-      if (!nom) throw new Error('Completá el nombre de cada hijo nuevo.')
-      if (!/^\d{6,10}$/.test(hdni)) throw new Error(`DNI inválido para "${nom}".`)
-      if (db.alumnos.some((a) => a.dni === hdni) || dnisNuevos.has(hdni)) {
-        throw new Error(`Ya existe un alumno registrado con DNI ${hdni}.`)
-      }
-      if (!String(h.curso ?? '').trim()) throw new Error(`Ingresá el curso de "${nom}".`)
-      dnisNuevos.add(hdni)
+  // Perfil del cliente: avatar, teléfono, límite propio de fiado, etc.
+  const updateCliente = async (clienteId, patch) => {
+    await sleep(90)
+    if (patch?.pin !== undefined && !/^\d{4}$/.test(String(patch.pin).trim())) {
+      throw new Error('El PIN debe tener exactamente 4 dígitos.')
     }
-
-    const ahora = Date.now()
-    const tutor = { id: `t${ahora}`, nombre, dni, pin: pinStr, telefono: tel, hijos: [] }
-    const nuevos = hijosNuevos.map((h, i) => {
-      const partes = String(h.nombre).trim().split(/\s+/).filter(Boolean)
-      const apellido = partes.length > 1 ? partes.pop() : ''
-      const hdni = String(h.dni).replace(/\D/g, '')
-      return {
-        id: `a${ahora}_${i}`,
-        nombre: partes.join(' '),
-        apellido,
-        dni: hdni,
-        pin: hdni.slice(-4) || '1234',
-        curso: String(h.curso).trim(),
-        tutorId: tutor.id,
-        saldo: 0,
-        deuda: 0,
-        avatar: '🎒',
-        limiteDiario: 0,
-        limiteFiado: 10000,
-        fiados: [],
-        movimientos: [],
-      }
-    })
-    tutor.hijos = [...ids, ...nuevos.map((a) => a.id)]
-
     mutate((n) => {
-      for (const id of ids) {
-        const a = n.alumnos.find((x) => x.id === id)
-        if (!a) continue
-        if (a.tutorId && a.tutorId !== tutor.id) {
-          const prev = n.tutores.find((t) => t.id === a.tutorId)
-          if (prev) prev.hijos = prev.hijos.filter((h) => h !== id)
-        }
-        a.tutorId = tutor.id
-      }
-      n.tutores.push(tutor)
-      n.alumnos.push(...nuevos)
+      const c = n.clientes.find((x) => x.id === clienteId)
+      if (c) Object.assign(c, patch)
     })
-    for (const a of nuevos) sync(fs.updateAlumno(a.id, a))
-    return { tutor, alumnos: nuevos }
+    sync(fs.updateCliente(clienteId, patch))
+  }
+
+  // Restablecimiento directo del PIN (mostrador): asigna el temporal.
+  const resetearPinCliente = async (clienteId, pin = ops.PIN_TEMPORAL) => {
+    await sleep(90)
+    if (!/^\d{4}$/.test(String(pin))) throw new Error('El PIN temporal debe tener 4 dígitos.')
+    const c = db.clientes.find((x) => x.id === clienteId)
+    if (!c) throw new Error('Cliente no encontrado.')
+    mutate((n) => {
+      const x = n.clientes.find((i) => i.id === clienteId)
+      if (!x) return
+      x.pin = pin
+      x.movimientos.unshift({
+        id: uid(),
+        fecha: new Date().toISOString(),
+        tipo: 'seguridad',
+        detalle: `PIN restablecido por el kiosco · temporal ${pin}`,
+        monto: 0,
+      })
+      avisarCliente(n, x, `Tu PIN fue restablecido por el kiosco. Clave temporal: ${pin}.`, 'seguridad')
+    })
+    sync(fs.updateCliente(clienteId, { pin }))
+    return pin
   }
 
   /* ================= LIBRETA / PAGOS ================= */
-  const registrarPago = async (alumnoId, monto, origen = 'kiosco') => {
+  const registrarPago = async (clienteId, monto, origen = 'kiosco') => {
     await sleep()
     monto = Number(monto)
     if (!monto || monto <= 0) throw new Error('Ingresá un monto válido.')
-    // El pago en efectivo auto-registrado por alumno/tutor está bloqueado en la
-    // UI; acá se refuerza: esos orígenes solo pueden informar transferencias.
-    if (origen === 'alumno' || origen === 'tutor') {
+    // El pago en efectivo auto-registrado por el cliente está bloqueado:
+    // ese origen solo puede informar transferencias pendientes.
+    if (origen === 'cliente') {
       throw new Error('El pago en efectivo solo se recibe en el mostrador. Informá una transferencia.')
     }
-    const alumno = db.alumnos.find((a) => a.id === alumnoId)
-    if (!alumno) throw new Error('Alumno no encontrado.')
+    const cliente = db.clientes.find((c) => c.id === clienteId)
+    if (!cliente) throw new Error('Cliente no encontrado.')
 
+    const detalle = origen === 'acreditacion' ? 'Transferencia acreditada' : 'Registrado en kiosco'
     mutate((n) => {
-      const a = n.alumnos.find((x) => x.id === alumnoId)
-      const { resto } = abonarFiados(a, monto)
-      a.movimientos.unshift({
-        id: uid(),
-        fecha: new Date().toISOString(),
-        tipo: 'abono',
-        detalle:
-          `Pago de deuda · ${
-            origen === 'tutor'
-              ? 'Comprobante del tutor'
-              : origen === 'alumno'
-                ? 'Comprobante del alumno'
-                : origen === 'acreditacion'
-                  ? 'Transferencia acreditada'
-                  : 'Registrado en kiosco'
-          }` + (resto > 0 ? ' (excedente a saldo)' : ''),
-        monto: -Math.min(monto, monto - resto),
-      })
+      const { cliente: c } = ops.aplicarPagoDb(n, clienteId, monto, detalle)
       if (origen === 'kiosco') {
-        avisarFamilia(n, a, `Pago de ${money(monto)} registrado en el kiosco para ${a.nombre} ${a.apellido}.`, 'acreditada')
+        avisarCliente(n, c, `Pago de ${money(monto)} registrado en el kiosco.`, 'acreditada')
       }
     })
-    const prev = clone(db).alumnos.find((x) => x.id === alumnoId)
+    const prev = clone(db).clientes.find((x) => x.id === clienteId)
     if (prev) {
-      abonarFiados(prev, monto)
-      sync(fs.updateSaldo(alumnoId, { saldo: prev.saldo, deuda: prev.deuda }))
+      ops.abonarFiados(prev, monto)
+      sync(fs.updateSaldo(clienteId, { saldo: prev.saldo, deuda: prev.deuda }))
     }
   }
 
-  const recargarSaldo = async (alumnoId, monto, origen = 'kiosco') => {
+  const recargarSaldo = async (clienteId, monto, origen = 'kiosco') => {
     await sleep()
     monto = Number(monto)
     if (!monto || monto <= 0) throw new Error('Ingresá un monto válido.')
+    const cliente = db.clientes.find((c) => c.id === clienteId)
+    if (!cliente) throw new Error('Cliente no encontrado.')
+    const detalle = origen === 'acreditacion' ? 'Transferencia acreditada' : 'Kiosco'
     mutate((n) => {
-      const a = n.alumnos.find((x) => x.id === alumnoId)
-      if (!a) return
-      // La recarga descuenta primero la deuda (fiados más antiguos primero)
-      const { abonado } = abonarFiados(a, monto)
-      a.movimientos.unshift({
-        id: uid(),
-        fecha: new Date().toISOString(),
-        tipo: 'recarga',
-        detalle:
-          `Recarga de saldo · ${origen === 'acreditacion' ? 'Transferencia acreditada' : 'Kiosco'}` +
-          (abonado > 0 ? ` ($ ${abonado.toLocaleString('es-AR')} aplicados a deuda)` : ''),
-        monto,
-      })
+      const { cliente: c } = ops.aplicarRecargaDb(n, clienteId, monto, detalle)
       if (origen === 'kiosco') {
-        avisarFamilia(n, a, `Recarga de ${money(monto)} acreditada en la billetera de ${a.nombre} ${a.apellido}.`, 'acreditada')
+        avisarCliente(n, c, `Recarga de ${money(monto)} acreditada en tu billetera.`, 'acreditada')
       }
     })
-    const prev = clone(db).alumnos.find((x) => x.id === alumnoId)
+    const prev = clone(db).clientes.find((x) => x.id === clienteId)
     if (prev) {
-      abonarFiados(prev, monto)
-      sync(fs.updateSaldo(alumnoId, { saldo: prev.saldo, deuda: prev.deuda }))
+      ops.abonarFiados(prev, monto)
+      sync(fs.updateSaldo(clienteId, { saldo: prev.saldo, deuda: prev.deuda }))
     }
   }
 
-  /* ============ TRANSFERENCIAS PENDIENTES ============ */
-  // El alumno/tutor informa una transferencia: queda registrada como
-  // pendiente hasta que el mostrador la acredite (sin tocar la deuda todavía).
-  const solicitarTransferencia = async ({ alumnoId, monto, origen = 'alumno', tipo = 'deuda' }) => {
+  /* ================= SOLICITUDES ================= */
+  // El cliente informa una transferencia desde su billetera: queda
+  // pendiente en la bandeja hasta que el mostrador la valide.
+  const solicitarTransferencia = async ({ clienteId, monto, origen = 'cliente', tipoOperacion = 'deuda' }) => {
     await sleep()
-    monto = Number(monto)
-    if (!monto || monto <= 0) throw new Error('Ingresá un monto válido.')
-    const alumno = db.alumnos.find((a) => a.id === alumnoId)
-    if (!alumno) throw new Error('Alumno no encontrado.')
-    // Bloqueo anti-spam: una sola solicitud en revisión por alumno.
-    if (db.pagosPendientes.some((p) => p.alumnoId === alumnoId)) {
-      throw new Error('Ya tenés una transferencia en proceso de revisión. El kiosco debe acreditarla antes de informar otra.')
-    }
-    const solicitud = {
-      id: uid(),
-      alumnoId,
-      nombre: `${alumno.nombre} ${alumno.apellido}`,
-      monto,
-      fechaHora: new Date().toISOString(),
-      estado: 'pendiente',
-      origen,
-      tipo, // 'deuda' | 'recarga'
-    }
+    const solicitud = ops.nuevaSolicitudTransferencia(db, { clienteId, monto, origen, tipoOperacion })
     mutate((n) => {
-      n.pagosPendientes.unshift(solicitud)
+      n.solicitudes.unshift(solicitud)
       avisar(
         n,
         'staff',
-        `${solicitud.nombre} informó una transferencia de ${money(monto)} (${tipo === 'recarga' ? 'recarga de saldo' : 'pago de deuda'}) para acreditar.`,
+        `${solicitud.nombre} informó una transferencia de ${money(solicitud.monto)} (${tipoOperacion === 'recarga' ? 'recarga de saldo' : 'pago de deuda'}) para acreditar.`,
         'pago'
       )
     })
-    sync(fs.upsertPagoPendiente(solicitud))
+    sync(fs.upsertSolicitud(solicitud))
     return solicitud
   }
 
-  // Acredita una solicitud: descuenta la deuda (o suma al saldo) y asienta
-  // el movimiento en la cuenta del alumno reutilizando registrarPago.
-  const acreditarPago = async (pagoId) => {
-    const pago = db.pagosPendientes.find((p) => p.id === pagoId)
-    if (!pago) throw new Error('La solicitud ya fue procesada.')
-    const alumnoPago = db.alumnos.find((a) => a.id === pago.alumnoId)
-    if (!alumnoPago) throw new Error('El alumno ya no existe.')
-    mutate((n) => {
-      n.pagosPendientes = n.pagosPendientes.filter((p) => p.id !== pagoId)
-      avisarFamilia(n, alumnoPago, `Transferencia de ${money(pago.monto)} acreditada a ${pago.nombre}.`, 'acreditada')
-    })
-    sync(fs.upsertPagoPendiente({ ...pago, estado: 'acreditado' }))
-    if (pago.tipo === 'recarga') await recargarSaldo(pago.alumnoId, pago.monto, 'acreditacion')
-    else await registrarPago(pago.alumnoId, pago.monto, 'acreditacion')
-    return pago
+  // "¿Olvidaste tu PIN?" del login público: si el DNI existe se registra
+  // una solicitud RESET_PIN pendiente (sin duplicar pedidos abiertos) y
+  // se avisa al mostrador por la campana.
+  const solicitarResetPin = async (dni) => {
+    await sleep()
+    const res = ops.nuevaSolicitudResetPin(db, { dni })
+    if (!res) throw new Error('No encontramos ningún cliente registrado con ese DNI.')
+    if (!res.duplicada) {
+      mutate((n) => {
+        n.solicitudes.unshift(res.solicitud)
+        avisar(n, 'staff', `${res.cliente.nombre} ${res.cliente.apellido} pidió restablecer su PIN (DNI ${res.cliente.dni}).`, 'seguridad')
+      })
+      sync(fs.upsertSolicitud(res.solicitud))
+    }
+    return res.solicitud
   }
 
-  const descartarPago = async (pagoId) => {
+  // Aprueba la solicitud: RESET_PIN → clave temporal; TRANSFERENCIA →
+  // impacta el saldo/deuda del cliente de inmediato.
+  const aprobarSolicitud = async (solicitudId) => {
     await sleep(90)
-    const pago = db.pagosPendientes.find((p) => p.id === pagoId)
-    const alumnoPago = pago && db.alumnos.find((a) => a.id === pago.alumnoId)
+    let resultado
     mutate((n) => {
-      n.pagosPendientes = n.pagosPendientes.filter((p) => p.id !== pagoId)
-      if (pago && alumnoPago) {
-        avisarFamilia(n, alumnoPago, `La transferencia de ${money(pago.monto)} informada por ${pago.nombre} fue rechazada.`, 'rechazada')
+      resultado = ops.aprobarSolicitudDb(n, solicitudId)
+      const { solicitud: s, cliente: c } = resultado
+      if (s.tipo === 'RESET_PIN') {
+        avisarCliente(n, c, `Tu PIN fue restablecido por el kiosco. Clave temporal: ${c.pin}.`, 'seguridad')
+      } else {
+        avisarCliente(n, c, `Transferencia de ${money(s.monto)} acreditada a tu cuenta.`, 'acreditada')
       }
     })
-    if (pago) sync(fs.upsertPagoPendiente({ ...pago, estado: 'descartado' }))
-  }
-
-  const setLimiteDiario = async (alumnoId, limite) => {
-    await sleep(90)
-    mutate((n) => {
-      const a = n.alumnos.find((x) => x.id === alumnoId)
-      if (a) a.limiteDiario = Math.max(0, Number(limite) || 0)
-    })
-  }
-
-  // Perfil del alumno: avatar (clave emoji) y/o foto (DataURL comprimida).
-  const updateAlumno = async (alumnoId, patch) => {
-    await sleep(90)
-    mutate((n) => {
-      const a = n.alumnos.find((x) => x.id === alumnoId)
-      if (a) Object.assign(a, patch)
-    })
-    sync(fs.updateAlumno(alumnoId, patch))
-  }
-
-  // Ajustes del tutor (PIN de acceso, teléfono...) desde "Gestionar Acceso".
-  const updateTutor = async (tutorId, patch) => {
-    await sleep(90)
-    if (patch?.pin !== undefined && !/^\d{4}$/.test(String(patch.pin).trim())) {
-      throw new Error('El PIN del tutor debe tener exactamente 4 dígitos.')
+    if (resultado?.solicitud) {
+      sync(fs.upsertSolicitud(resultado.solicitud))
+      if (resultado.solicitud.tipo === 'RESET_PIN') {
+        sync(fs.updateCliente(resultado.cliente.id, { pin: resultado.cliente.pin }))
+      } else {
+        sync(fs.updateSaldo(resultado.cliente.id, { saldo: resultado.cliente.saldo, deuda: resultado.cliente.deuda }))
+      }
     }
+    return resultado
+  }
+
+  const descartarSolicitud = async (solicitudId) => {
+    await sleep(90)
+    const s = db.solicitudes.find((x) => x.id === solicitudId)
+    const cliente = s && db.clientes.find((c) => c.id === s.clienteId)
     mutate((n) => {
-      const t = n.tutores.find((x) => x.id === tutorId)
-      if (t) Object.assign(t, patch)
+      ops.descartarSolicitudDb(n, solicitudId)
+      if (s && cliente) {
+        const c = n.clientes.find((x) => x.id === s.clienteId)
+        avisarCliente(
+          n,
+          c,
+          s.tipo === 'RESET_PIN'
+            ? 'Tu pedido de restablecimiento de PIN fue descartado por el kiosco.'
+            : `La transferencia de ${money(s.monto)} que informaste fue rechazada.`,
+          'rechazada'
+        )
+      }
     })
+    if (s) sync(fs.upsertSolicitud({ ...s, estado: 'descartada' }))
   }
 
   /* ================= STAFF / VENDEDORES ================= */
@@ -712,10 +482,10 @@ export function KioscoProvider({ children }) {
     notify('Datos de demostración restablecidos.', 'info')
   }
 
-  const alumnoSesion =
-    session?.rol === 'alumno' ? db.alumnos.find((a) => a.id === session.id) || null : null
-  const tutorSesion =
-    session?.rol === 'tutor' ? db.tutores.find((t) => t.id === session.id) || null : null
+  const clienteSesion =
+    session?.rol === 'cliente' ? db.clientes.find((c) => c.id === session.id) || null : null
+
+  const solicitudesPendientes = ops.solicitudesPendientesDe(db)
 
   // Categorías base + las que ya existan en productos (creadas al vuelo)
   const categorias = [
@@ -726,19 +496,17 @@ export function KioscoProvider({ children }) {
     db,
     config: db.config,
     productos: db.productos,
-    alumnos: db.alumnos,
-    tutores: db.tutores,
+    clientes: db.clientes,
     staff: db.staff,
     ventas: db.ventas,
-    pagosPendientes: db.pagosPendientes,
+    solicitudes: db.solicitudes,
+    solicitudesPendientes,
     notificaciones: db.notificaciones || [],
     session,
-    alumnoSesion,
-    tutorSesion,
+    clienteSesion,
     categorias,
     notify,
-    loginAlumno,
-    loginTutor,
+    loginCliente,
     loginStaff,
     logout,
     addProducto,
@@ -747,16 +515,16 @@ export function KioscoProvider({ children }) {
     registrarVenta,
     aprobarCobroEspera,
     anularVenta,
-    crearAlumno,
-    crearTutor,
+    crearCliente,
+    eliminarCliente,
+    updateCliente,
+    resetearPinCliente,
     registrarPago,
     recargarSaldo,
     solicitarTransferencia,
-    acreditarPago,
-    descartarPago,
-    setLimiteDiario,
-    updateAlumno,
-    updateTutor,
+    solicitarResetPin,
+    aprobarSolicitud,
+    descartarSolicitud,
     persistencia: { modo: remoto ? 'firebase' : 'local', remoto, useFirebase: USE_FIREBASE },
     addVendedor,
     deleteVendedor,

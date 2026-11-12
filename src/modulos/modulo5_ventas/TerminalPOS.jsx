@@ -6,15 +6,16 @@ import { fmtFechaHora, money } from '../../utils/format'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
-import AvatarAlumno from '../../components/ui/AvatarAlumno'
+import AvatarCliente from '../../components/ui/AvatarCliente'
 import ProductoImg from '../../components/ui/ProductoImg'
 import EscanerCamara from '../../components/ui/EscanerCamara'
 import TicketVenta from './TicketVenta'
+import { limiteFiadoVigente } from '../../context/operaciones'
 
 const METODOS = [
   { k: 'efectivo', label: 'Efectivo', icon: Banknote, active: 'border-emerald-400 bg-emerald-50 text-emerald-700' },
   { k: 'transferencia', label: 'Transferencia', icon: Landmark, active: 'border-indigo-400 bg-indigo-50 text-indigo-700' },
-  { k: 'fiado', label: 'Fiado', icon: HandCoins, active: 'border-amber-400 bg-amber-50 text-amber-700' },
+  { k: 'fiado', label: 'Cta. Corriente', icon: HandCoins, active: 'border-amber-400 bg-amber-50 text-amber-700' },
 ]
 
 // Clave de sessionStorage donde vive el ticket en curso: sobrevive a
@@ -22,15 +23,15 @@ const METODOS = [
 // al cerrar la pestaña del navegador.
 const CART_KEY = 'kiosco_cart_temp'
 
-// Buscador de alumnos reutilizable: se usa en modo fiado (obligatorio) y
-// en contado cuando el vendedor elige asociar la venta a un alumno.
-function BuscadorAlumno({ q, onQ, resultados, onSelect, borde = 'border-slate-200' }) {
+// Buscador de clientes reutilizable: se usa en modo fiado (obligatorio) y
+// en contado cuando el vendedor elige asociar la venta a un cliente.
+function BuscadorCliente({ q, onQ, resultados, onSelect, borde = 'border-slate-200' }) {
   return (
     <>
       <input
         value={q}
         onChange={(e) => onQ(e.target.value)}
-        placeholder="Buscar alumno por nombre, DNI o curso…"
+        placeholder="Buscar cliente por nombre, DNI o teléfono…"
         className={`w-full rounded-lg border ${borde} bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100`}
       />
       <ul className="mt-2 flex max-h-44 flex-col gap-1 overflow-y-auto">
@@ -40,8 +41,8 @@ function BuscadorAlumno({ q, onQ, resultados, onSelect, borde = 'border-slate-20
               onClick={() => onSelect(a)}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white"
             >
-              <AvatarAlumno alumno={a} className="h-7 w-7" emojiClassName="text-sm" textoClassName="text-[9px]" />
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{a.nombre} {a.apellido} · {a.curso}</span>
+              <AvatarCliente cliente={a} className="h-7 w-7" emojiClassName="text-sm" textoClassName="text-[9px]" />
+              <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{a.nombre} {a.apellido} · DNI {a.dni}</span>
               <span className="text-[11px] text-slate-400">debe {money(a.deuda)}</span>
             </button>
           </li>
@@ -54,18 +55,18 @@ function BuscadorAlumno({ q, onQ, resultados, onSelect, borde = 'border-slate-20
   )
 }
 
-// Tarjeta del alumno ya seleccionado, con opción de quitarlo.
-function AlumnoElegido({ alumno, onQuitar, detalle }) {
+// Tarjeta del cliente ya seleccionado, con opción de quitarlo.
+function ClienteElegido({ cliente, onQuitar, detalle }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <AvatarAlumno alumno={alumno} className="h-9 w-9" emojiClassName="text-lg" />
+      <AvatarCliente cliente={cliente} className="h-9 w-9" emojiClassName="text-lg" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-slate-800">
-          {alumno.nombre} {alumno.apellido}
+          {cliente.nombre} {cliente.apellido}
         </p>
         <p className="text-[11px] text-slate-500">{detalle}</p>
       </div>
-      <button onClick={onQuitar} className="rounded-lg p-1 text-slate-400 hover:bg-white" aria-label="Quitar alumno">
+      <button onClick={onQuitar} className="rounded-lg p-1 text-slate-400 hover:bg-white" aria-label="Quitar cliente">
         <X size={15} />
       </button>
     </div>
@@ -73,7 +74,7 @@ function AlumnoElegido({ alumno, onQuitar, detalle }) {
 }
 
 export default function TerminalPOS() {
-  const { productos, alumnos, categorias, ventas, registrarVenta, aprobarCobroEspera, anularVenta, notify, session, config } = useKiosco()
+  const { productos, clientes, categorias, ventas, registrarVenta, aprobarCobroEspera, anularVenta, notify, session, config } = useKiosco()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('Todas')
   const [cart, setCart] = useState(() => {
@@ -87,9 +88,9 @@ export default function TerminalPOS() {
     }
   }) // {productoId, cantidad} — se restaura de sessionStorage al montar
   const [metodo, setMetodo] = useState('efectivo')
-  const [qAlumno, setQAlumno] = useState('')
-  const [alumnoSel, setAlumnoSel] = useState(null)
-  const [buscarAlumno, setBuscarAlumno] = useState(false)
+  const [qCliente, setQCliente] = useState('')
+  const [clienteSel, setClienteSel] = useState(null)
+  const [buscarCliente, setBuscarCliente] = useState(false)
   const [busy, setBusy] = useState(false)
   const [ticket, setTicket] = useState(null)
   const [transfOpen, setTransfOpen] = useState(false)
@@ -99,7 +100,9 @@ export default function TerminalPOS() {
   const [esperaOpen, setEsperaOpen] = useState(false)
   const [cobroOpen, setCobroOpen] = useState(false) // modal obligatorio antes de asentar la venta
 
-  const limiteFiado = Number(config.limiteFiadoGlobal) || 0
+  // Límite de cuenta corriente vigente: el tope propio del cliente si lo
+  // tiene cargado; si no, el global del kiosco.
+  const limiteFiado = clienteSel ? limiteFiadoVigente(clienteSel, config) : Number(config.limiteFiadoGlobal) || 0
 
   // Persistencia del ticket: cada cambio del carrito se refleja en
   // sessionStorage (el estado inicial ya lo restauró al montar). Se
@@ -115,9 +118,11 @@ export default function TerminalPOS() {
   }, [cart])
 
   // Sanea el ticket restaurado: descarta productos que ya no existen o
-  // quedaron sin stock, y limita cantidades al stock disponible.
-  useEffect(() => {
-    if (!productos.length) return
+  // quedaron sin stock, y limita cantidades al stock disponible. Se ajusta
+  // durante el render (en vez de un efecto) comparando la lista previa.
+  const [prodsVistos, setProdsVistos] = useState(productos)
+  if (productos.length && prodsVistos !== productos) {
+    setProdsVistos(productos)
     setCart((c) => {
       let cambio = false
       const limpia = []
@@ -130,7 +135,7 @@ export default function TerminalPOS() {
       }
       return cambio ? limpia : c
     })
-  }, [productos])
+  }
 
   const list = useMemo(
     () =>
@@ -144,14 +149,14 @@ export default function TerminalPOS() {
     [productos, q, cat]
   )
 
-  const alumnosFiltrados = useMemo(
+  const clientesFiltrados = useMemo(
     () =>
-      alumnos
+      clientes
         .filter((a) =>
-          incluye(`${a.nombre} ${a.apellido} ${a.dni} ${a.curso}`, qAlumno)
+          incluye(`${a.nombre} ${a.apellido} ${a.dni} ${a.telefono || ''}`, qCliente)
         )
         .slice(0, 6),
-    [alumnos, qAlumno]
+    [clientes, qCliente]
   )
 
   const enCarrito = (id) => cart.find((i) => i.productoId === id)?.cantidad || 0
@@ -177,8 +182,8 @@ export default function TerminalPOS() {
     return s + (p ? p.precio * i.cantidad : 0)
   }, 0)
 
-  const deudaProyectada = (alumnoSel?.deuda || 0) + total
-  const superaLimite = metodo === 'fiado' && !!alumnoSel && limiteFiado > 0 && deudaProyectada > limiteFiado
+  const deudaProyectada = (clienteSel?.deuda || 0) + total
+  const superaLimite = metodo === 'fiado' && !!clienteSel && limiteFiado > 0 && deudaProyectada > limiteFiado
 
   // Transferencias guardadas en espera de acreditación (stock ya descontado).
   const enEspera = useMemo(
@@ -190,9 +195,9 @@ export default function TerminalPOS() {
   const limpiarTicket = () => {
     setCart([])
     setMetodo('efectivo')
-    setAlumnoSel(null)
-    setQAlumno('')
-    setBuscarAlumno(false)
+    setClienteSel(null)
+    setQCliente('')
+    setBuscarCliente(false)
     setSheetOpen(false)
     setCobroOpen(false)
   }
@@ -210,7 +215,7 @@ export default function TerminalPOS() {
       const venta = await registrarVenta({
         items: cart,
         metodo,
-        alumnoId: alumnoSel?.id,
+        clienteId: clienteSel?.id,
         vendedor: session?.nombre || 'mostrador',
         excepcionFiado,
         enEspera: enEsperaFlag,
@@ -243,7 +248,10 @@ export default function TerminalPOS() {
     if (busy) return
     if (!config.abierto) return notify('Kiosco cerrado: no se pueden registrar ventas.', 'warn')
     if (!cart.length) return notify('El carrito está vacío.', 'warn')
-    if (metodo === 'fiado' && !alumnoSel) return notify('El fiado exige seleccionar un alumno.', 'warn')
+    if (metodo === 'fiado' && !clienteSel) return notify('La cuenta corriente exige seleccionar un cliente registrado.', 'warn')
+    if (metodo === 'fiado' && clienteSel && limiteFiado <= 0 && !(clienteSel.saldo > 0)) {
+      return notify('El cliente no tiene saldo ni límite de cuenta corriente habilitado.', 'warn')
+    }
     if (superaLimite) { setCobroOpen(false); return setExcepcionOpen(true) }
     if (metodo === 'transferencia') { setCobroOpen(false); return setTransfOpen(true) }
     ejecutarVenta()
@@ -280,10 +288,10 @@ export default function TerminalPOS() {
     }
   }
 
-  // Carga un pedido express (QR del alumno): setea alumno + carrito, método fiado.
+  // Carga un pedido express (QR del cliente): setea cliente + carrito, método fiado.
   const cargarPedidoQR = (data) => {
-    const alumno = alumnos.find((a) => a.id === data.alumnoId)
-    if (!alumno) return notify('El QR no corresponde a un alumno registrado.', 'error')
+    const cliente = clientes.find((a) => a.id === data.clienteId)
+    if (!cliente) return notify('El QR no corresponde a un cliente registrado.', 'error')
     if (!Array.isArray(data.items) || !data.items.length) return notify('El pedido está vacío.', 'warn')
 
     // Consolida por productoId: si el pedido repite un ítem, la suma total
@@ -308,12 +316,12 @@ export default function TerminalPOS() {
     if (!nuevoCart.length) return notify('Ningún producto del pedido tiene stock disponible.', 'warn')
 
     setCart(nuevoCart)
-    setAlumnoSel(alumno)
+    setClienteSel(cliente)
     setMetodo('fiado')
-    setQAlumno('')
+    setQCliente('')
     setScanOpen(false)
     if (omitidos.length) notify(`Sin stock completo: ${omitidos.join(', ')}.`, 'warn')
-    notify(`Pedido de ${data.nombre || alumno.nombre} cargado · ${nuevoCart.length} producto(s).`)
+    notify(`Pedido de ${data.nombre || cliente.nombre} cargado · ${nuevoCart.length} producto(s).`)
   }
 
   // La cámara distingue QR de pedido (JSON) vs código de barras de producto.
@@ -333,7 +341,7 @@ export default function TerminalPOS() {
 
   // Contenido del ticket compartido entre la columna lateral (xl) y el
   // sheet desplegable de la barra flotante (pantallas chicas): mismos
-  // ítems, método de pago y selección de alumno.
+  // ítems, método de pago y selección de cliente.
   const itemsTicket =
     cart.length === 0 ? (
       <p className="rounded-xl border border-dashed border-slate-300 py-8 text-center text-xs text-slate-400">
@@ -389,63 +397,74 @@ export default function TerminalPOS() {
         </div>
       </div>
 
-      {/* Cliente: por defecto es venta libre al mostrador (anónima, sin
-          datos). Asociar un alumno es opcional en contado; solo el fiado
-          lo exige para anotar la deuda en su libreta. */}
+      {/* Cliente: el POS opera por defecto en modo Consumidor Final /
+          Venta Libre (anónima, sin datos). Asociar un cliente es opcional
+          en efectivo y transferencia; solo la cuenta corriente lo exige
+          para anotar la deuda en su libreta. */}
       {metodo === 'fiado' ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-          {alumnoSel ? (
-            <AlumnoElegido
-              alumno={alumnoSel}
-              onQuitar={() => setAlumnoSel(null)}
-              detalle={`${alumnoSel.curso} · Deuda actual ${money(alumnoSel.deuda)}${limiteFiado > 0 ? ` · Límite fiado ${money(limiteFiado)}` : ''}`}
+          {clienteSel ? (
+            <ClienteElegido
+              cliente={clienteSel}
+              onQuitar={() => setClienteSel(null)}
+              detalle={`DNI ${clienteSel.dni} · Deuda actual ${money(clienteSel.deuda)}${limiteFiado > 0 ? ` · Límite cta. cte. ${money(limiteFiado)}` : ''}${clienteSel.saldo > 0 ? ` · Saldo a favor ${money(clienteSel.saldo)}` : ''}`}
             />
           ) : (
             <>
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                Alumno obligatorio para fiar
+                Cliente registrado obligatorio (saldo o límite habilitado)
               </p>
-              <BuscadorAlumno
-                q={qAlumno}
-                onQ={setQAlumno}
-                resultados={alumnosFiltrados}
-                onSelect={setAlumnoSel}
+              <BuscadorCliente
+                q={qCliente}
+                onQ={setQCliente}
+                resultados={clientesFiltrados}
+                onSelect={setClienteSel}
                 borde="border-amber-200"
               />
             </>
           )}
         </div>
-      ) : alumnoSel ? (
+      ) : clienteSel ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <AlumnoElegido
-            alumno={alumnoSel}
-            onQuitar={() => setAlumnoSel(null)}
-            detalle={`${alumnoSel.curso} · La venta queda en su historial (sin fiar)`}
+          <ClienteElegido
+            cliente={clienteSel}
+            onQuitar={() => setClienteSel(null)}
+            detalle={`DNI ${clienteSel.dni} · La venta queda en su historial (sin fiar)`}
           />
         </div>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-slate-500">
-              <span className="font-semibold text-slate-600">Venta libre</span> · al mostrador, sin datos del cliente
+              <span className="font-semibold text-slate-600">Consumidor Final · Venta Libre</span> · sin datos del cliente
             </p>
             <button
-              onClick={() => setBuscarAlumno((v) => !v)}
+              onClick={() => setBuscarCliente((v) => !v)}
               className="shrink-0 text-xs font-semibold text-emerald-600 transition-colors hover:text-emerald-700"
             >
-              {buscarAlumno ? 'Ocultar' : 'Asociar alumno'}
+              {buscarCliente ? 'Ocultar' : 'Asociar cliente'}
             </button>
           </div>
-          {buscarAlumno && (
+          {buscarCliente && (
             <div className="mt-2">
-              <BuscadorAlumno
-                q={qAlumno}
-                onQ={setQAlumno}
-                resultados={alumnosFiltrados}
-                onSelect={(a) => { setAlumnoSel(a); setBuscarAlumno(false) }}
+              <BuscadorCliente
+                q={qCliente}
+                onQ={setQCliente}
+                resultados={clientesFiltrados}
+                onSelect={(a) => { setClienteSel(a); setBuscarCliente(false) }}
               />
             </div>
           )}
+        </div>
+      )}
+
+      {metodo === 'fiado' && clienteSel && limiteFiado <= 0 && !(clienteSel.saldo > 0) && (
+        <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            {clienteSel.nombre} no tiene saldo a favor ni límite de cuenta corriente habilitado:
+            no se le puede fiar.
+          </span>
         </div>
       )}
 
@@ -453,7 +472,7 @@ export default function TerminalPOS() {
         <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <span>
-            Excede el límite de fiado global ({money(limiteFiado)}). Deuda proyectada:{' '}
+            Excede el límite de cuenta corriente ({money(limiteFiado)}). Deuda proyectada:{' '}
             <b>{money(deudaProyectada)}</b>. Al cobrar se pedirá confirmación de excepción.
           </span>
         </div>
@@ -735,7 +754,7 @@ export default function TerminalPOS() {
                   {v.items.map((it) => `${it.cantidad}× ${it.nombre}`).join(' · ')}
                 </p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
-                  {v.alumnoNombre ? `Alumno: ${v.alumnoNombre} · ` : 'Venta libre · '}Atendió {v.vendedor}
+                  {v.clienteNombre ? `Cliente: ${v.clienteNombre} · ` : 'Consumidor final · '}Atendió {v.vendedor}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <Button
@@ -763,21 +782,21 @@ export default function TerminalPOS() {
         )}
       </Modal>
 
-      {/* Excepción de límite de fiado global. Cancelar vuelve al modal
+      {/* Excepción de límite de cuenta corriente. Cancelar vuelve al modal
           de cobro con el carrito intacto. */}
       <Modal open={excepcionOpen} onClose={() => { setExcepcionOpen(false); setCobroOpen(true) }} title="Excepción de límite de fiado">
         <div className="flex flex-col gap-4">
           <div className="flex items-start gap-3 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             <AlertTriangle size={18} className="mt-0.5 shrink-0" />
             <span>
-              <b>{alumnoSel?.nombre} {alumnoSel?.apellido}</b> supera el límite de fiado global de{' '}
-              <b>{money(limiteFiado)}</b>. Deuda actual {money(alumnoSel?.deuda)} → proyectada{' '}
+              <b>{clienteSel?.nombre} {clienteSel?.apellido}</b> supera el límite de cuenta corriente de{' '}
+              <b>{money(limiteFiado)}</b>. Deuda actual {money(clienteSel?.deuda)} → proyectada{' '}
               <b>{money(deudaProyectada)}</b>.
             </span>
           </div>
           <p className="text-xs text-slate-500">
             Podés autorizar la excepción bajo tu responsabilidad como vendedor. La venta quedará
-            registrada en la libreta del alumno.
+            registrada en la libreta del cliente.
           </p>
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => { setExcepcionOpen(false); setCobroOpen(true) }}>Volver al cobro</Button>

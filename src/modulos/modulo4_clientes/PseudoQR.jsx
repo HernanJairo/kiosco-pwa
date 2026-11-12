@@ -1,4 +1,4 @@
-// QR estético determinístico generado a partir del DNI del alumno.
+// QR estético determinístico generado a partir del DNI del cliente.
 const N = 21
 
 const hash = (s) => {
@@ -37,7 +37,7 @@ export default function PseudoQR({ text, size = 150 }) {
   }
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Código del alumno">
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Código del cliente">
       <rect width={size} height={size} rx={size * 0.04} fill="#fff" />
       <g fill="#0f172a">{cells}</g>
     </svg>

@@ -32,25 +32,20 @@ import LoginPanel from './modulos/modulo1_catalogo_auth/LoginPanel'
 import ProductosABM from './modulos/modulo2_productos/ProductosABM'
 import StockRapido from './modulos/modulo2_productos/StockRapido'
 import VencimientosPanel from './modulos/modulo3_vencimientos/VencimientosPanel'
-import BilleteraAlumno from './modulos/modulo4_clientes/BilleteraAlumno'
-import CarnetAlumno from './modulos/modulo4_clientes/CarnetAlumno'
-import TutorPanel from './modulos/modulo4_clientes/TutorPanel'
+import BilleteraCliente from './modulos/modulo4_clientes/BilleteraCliente'
+import CarnetCliente from './modulos/modulo4_clientes/CarnetCliente'
 import ClientesAdmin from './modulos/modulo4_clientes/ClientesAdmin'
 import TerminalPOS from './modulos/modulo5_ventas/TerminalPOS'
 import AuditoriaVentas from './modulos/modulo5_ventas/AuditoriaVentas'
-import CobranzaAlumnos from './modulos/modulo5_ventas/CobranzaAlumnos'
+import CobranzaClientes from './modulos/modulo5_ventas/CobranzaClientes'
 import Dashboard from './modulos/modulo6_reportes/Dashboard'
 import ConfiguracionKiosco, { PanelMiAcceso } from './modulos/admin/ConfiguracionKiosco'
 
 const TABS = {
-  alumno: [
+  cliente: [
     { key: 'catalogo', label: 'Catálogo', icon: Store },
     { key: 'billetera', label: 'Mi Billetera', icon: Wallet },
     { key: 'carnet', label: 'Mi Carnet', icon: IdCard },
-  ],
-  tutor: [
-    { key: 'panel', label: 'Panel Familiar', icon: Users },
-    { key: 'catalogo', label: 'Catálogo', icon: Store },
   ],
   vendedor: [
     { key: 'pos', label: 'Terminal POS', icon: ShoppingCart },
@@ -71,9 +66,8 @@ const TABS = {
 }
 
 const MODULOS = {
-  alumno: { catalogo: CatalogoPublico, billetera: BilleteraAlumno, carnet: CarnetAlumno },
-  tutor: { panel: TutorPanel, catalogo: CatalogoPublico },
-  vendedor: { pos: TerminalPOS, cobranza: CobranzaAlumnos, stock: StockRapido, catalogo: CatalogoPublico, cuenta: PanelMiAcceso },
+  cliente: { catalogo: CatalogoPublico, billetera: BilleteraCliente, carnet: CarnetCliente },
+  vendedor: { pos: TerminalPOS, cobranza: CobranzaClientes, stock: StockRapido, catalogo: CatalogoPublico, cuenta: PanelMiAcceso },
   admin: {
     config: ConfiguracionKiosco,
     productos: ProductosABM,
@@ -86,7 +80,7 @@ const MODULOS = {
 }
 
 export default function App() {
-  const { session, alumnoSesion, tutorSesion, logout, config } = useKiosco()
+  const { session, clienteSesion, logout, config } = useKiosco()
   const [contactoOpen, setContactoOpen] = useState(false)
   const [vista, setVista] = useState('login') // 'login' | 'catalogo' (solo landing pública)
   const [tab, setTab] = useState(null)
@@ -96,9 +90,8 @@ export default function App() {
 
   // Sesión huérfana (datos restablecidos): cerrar sesión
   useEffect(() => {
-    if (rol === 'alumno' && alumnoSesion === null) logout()
-    if (rol === 'tutor' && tutorSesion === null) logout()
-  }, [rol, alumnoSesion, tutorSesion, logout])
+    if (rol === 'cliente' && clienteSesion === null) logout()
+  }, [rol, clienteSesion, logout])
 
   /* ---------- Vista pública: bienvenida + login directo ---------- */
   if (!session) {
@@ -143,7 +136,7 @@ export default function App() {
                 <div>
                   <h2 className="text-xl font-bold sm:text-2xl">Catálogo del kiosco</h2>
                   <p className="mt-1 flex items-center gap-1.5 text-sm text-emerald-100">
-                    <Store size={14} /> {config.colegio}
+                    <Store size={14} /> {config.direccion}
                   </p>
                 </div>
                 <Badge tone="white" className="w-fit">
@@ -161,7 +154,7 @@ export default function App() {
           <div className="flex flex-col gap-3 text-sm text-slate-600">
             <p className="font-semibold text-slate-800">{config.nombreKiosco}</p>
             <p className="flex items-center gap-2">
-              <MapPin size={15} className="shrink-0 text-emerald-600" /> {config.colegio}
+              <MapPin size={15} className="shrink-0 text-emerald-600" /> {config.direccion}
             </p>
             <p className="flex items-center gap-2">
               <Phone size={15} className="shrink-0 text-emerald-600" /> {config.contacto}

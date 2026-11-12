@@ -10,7 +10,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import StatCard from '../../components/ui/StatCard'
 
 const METODO_TONE = { efectivo: 'emerald', transferencia: 'indigo', fiado: 'amber' }
-const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', fiado: 'Fiado' }
+const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', fiado: 'Cta. Corriente' }
 
 export default function AuditoriaVentas() {
   const { ventas, anularVenta, notify } = useKiosco()
@@ -108,7 +108,7 @@ export default function AuditoriaVentas() {
                   </p>
                   <p className="mt-0.5 text-[11px] text-slate-400">
                     Atendió {v.vendedor}
-                    {v.alumnoNombre ? ` · Alumno: ${v.alumnoNombre}` : ''}
+                    {v.clienteNombre ? ` · Cliente: ${v.clienteNombre}` : ''}
                   </p>
                 </div>
                 <Badge tone={METODO_TONE[v.metodo]}>{METODO_LABEL[v.metodo]}</Badge>
@@ -130,7 +130,7 @@ export default function AuditoriaVentas() {
             <p className="text-sm text-slate-600">
               ¿Anular la venta <b>#{anulando.id.slice(0, 8).toUpperCase()}</b> por{' '}
               <b className="text-slate-800">{money(anulando.total)}</b>? Se restaurará el stock
-              {anulando.metodo === 'fiado' ? ' y se revertirá la deuda del alumno' : ''}.
+              {anulando.metodo === 'fiado' ? ' y se revertirá la deuda del cliente' : ''}.
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setAnulando(null)}>Cancelar</Button>

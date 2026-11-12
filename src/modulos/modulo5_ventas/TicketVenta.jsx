@@ -5,7 +5,7 @@ import Modal from '../../components/ui/Modal'
 import Button from '../../components/ui/Button'
 import Logo from '../../assets/logo'
 
-const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', fiado: 'Fiado (libreta)' }
+const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', fiado: 'Cta. Corriente' }
 
 export default function TicketVenta({ venta, onClose }) {
   const { config, notify } = useKiosco()
@@ -18,7 +18,7 @@ export default function TicketVenta({ venta, onClose }) {
             <div className="mb-3 flex flex-col items-center gap-1 text-center">
               <Logo className="h-10 w-10" />
               <p className="text-sm font-bold">{config.nombreKiosco}</p>
-              <p className="text-[10px] text-slate-500">{config.colegio}</p>
+              <p className="text-[10px] text-slate-500">{config.direccion}</p>
               <p className="text-[10px] text-slate-500">{config.contacto}</p>
             </div>
             <div className="border-y border-dashed border-slate-300 py-2 text-[11px]">
@@ -32,7 +32,7 @@ export default function TicketVenta({ venta, onClose }) {
               </div>
               <div className="flex justify-between">
                 <span>Cliente:</span>
-                <span>{venta.alumnoNombre || 'Venta libre · mostrador'}</span>
+                <span>{venta.clienteNombre || 'Consumidor final · mostrador'}</span>
               </div>
             </div>
             <ul className="flex flex-col gap-1.5 border-b border-dashed border-slate-300 py-2">

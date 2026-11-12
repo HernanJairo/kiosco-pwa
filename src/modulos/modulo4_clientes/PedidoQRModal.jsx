@@ -5,24 +5,24 @@ import { money } from '../../utils/format'
 import Modal from '../../components/ui/Modal'
 import Button from '../../components/ui/Button'
 
-// Codifica: { tipo, alumnoId, nombre, items: [{p: productoId, c: cantidad}] }
-export default function PedidoQRModal({ alumno, items, open, onClose }) {
+// Codifica: { tipo, clienteId, nombre, items: [{p: productoId, c: cantidad}] }
+export default function PedidoQRModal({ cliente, items, open, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title="QR de Pedido Express">
-      {open && alumno && <ContenidoQR alumno={alumno} items={items} onClose={onClose} />}
+      {open && cliente && <ContenidoQR cliente={cliente} items={items} onClose={onClose} />}
     </Modal>
   )
 }
 
 // Se monta solo al abrir: el QR se regenera por cada apertura del modal.
-function ContenidoQR({ alumno, items, onClose }) {
+function ContenidoQR({ cliente, items, onClose }) {
   const [src, setSrc] = useState('')
 
   useEffect(() => {
     const payload = JSON.stringify({
       tipo: 'KIOSCO_PEDIDO',
-      alumnoId: alumno.id,
-      nombre: `${alumno.nombre} ${alumno.apellido}`,
+      clienteId: cliente.id,
+      nombre: `${cliente.nombre} ${cliente.apellido}`,
       items: items.map((i) => ({ p: i.productoId, c: i.cantidad })),
     })
     let activo = true
@@ -32,7 +32,7 @@ function ContenidoQR({ alumno, items, onClose }) {
     return () => {
       activo = false
     }
-  }, [alumno, items])
+  }, [cliente, items])
 
   const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0)
 
@@ -40,7 +40,7 @@ function ContenidoQR({ alumno, items, onClose }) {
     <div className="flex flex-col items-center gap-4">
       <div className="text-center">
         <p className="text-sm font-semibold text-slate-800">
-          {alumno.nombre} {alumno.apellido} · {alumno.curso}
+          {cliente.nombre} {cliente.apellido} · DNI {cliente.dni}
         </p>
         <p className="text-xs text-slate-400">
           {items.reduce((s, i) => s + i.cantidad, 0)} ítem(s) · Total estimado {money(total)}

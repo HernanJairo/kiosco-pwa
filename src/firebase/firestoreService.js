@@ -13,9 +13,9 @@ import { firebaseConfig, firebaseLista } from './firebaseConfig'
 
 const COLECCIONES = {
   productos: 'productos',
-  alumnos: 'alumnos',
+  clientes: 'clientes',
   ventas: 'ventas',
-  pagos: 'pagos',
+  solicitudes: 'solicitudes',
 }
 
 let _db = null
@@ -56,7 +56,7 @@ export async function getProductos() {
 }
 
 export async function getClientes() {
-  return listar(COLECCIONES.alumnos)
+  return listar(COLECCIONES.clientes)
 }
 
 /* ================= ESCRITURAS ================= */
@@ -73,16 +73,17 @@ export async function registrarVenta(venta) {
   return mergear(COLECCIONES.ventas, venta.id, venta)
 }
 
-export async function updateSaldo(alumnoId, { saldo, deuda }) {
-  return mergear(COLECCIONES.alumnos, alumnoId, { saldo, deuda })
+export async function updateSaldo(clienteId, { saldo, deuda }) {
+  return mergear(COLECCIONES.clientes, clienteId, { saldo, deuda })
 }
 
-export async function updateAlumno(alumnoId, patch) {
-  return mergear(COLECCIONES.alumnos, alumnoId, patch)
+export async function updateCliente(clienteId, patch) {
+  return mergear(COLECCIONES.clientes, clienteId, patch)
 }
 
-// Solicitud de transferencia informada por alumno/tutor. El mismo documento
-// se reescribe con estado 'acreditado' | 'descartado' al resolverse.
-export async function upsertPagoPendiente(pago) {
-  return mergear(COLECCIONES.pagos, pago.id, pago)
+// Solicitud del centro de notificaciones (RESET_PIN o
+// TRANSFERENCIA_PENDIENTE). El mismo documento se reescribe con estado
+// 'aprobada' | 'descartada' al resolverse.
+export async function upsertSolicitud(solicitud) {
+  return mergear(COLECCIONES.solicitudes, solicitud.id, solicitud)
 }

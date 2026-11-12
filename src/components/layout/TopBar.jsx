@@ -5,7 +5,9 @@ import {
   CheckCheck,
   CheckCircle2,
   Hourglass,
+  Inbox,
   Info,
+  KeyRound,
   LogOut,
   PackageOpen,
   ShoppingBag,
@@ -22,8 +24,8 @@ import Modal from '../ui/Modal'
 import EmptyState from '../ui/EmptyState'
 import AcercaDeModal from '../AcercaDeModal'
 
-const ROL_LABEL = { alumno: 'Alumno', tutor: 'Tutor', vendedor: 'Vendedor', admin: 'Admin' }
-const ROL_TONE = { alumno: 'indigo', tutor: 'emerald', vendedor: 'amber', admin: 'rose' }
+const ROL_LABEL = { cliente: 'Cliente', vendedor: 'Vendedor', admin: 'Admin' }
+const ROL_TONE = { cliente: 'indigo', vendedor: 'amber', admin: 'rose' }
 const ROLES_MOSTRADOR = ['vendedor', 'admin']
 
 const NOTIF_ICON = {
@@ -31,6 +33,7 @@ const NOTIF_ICON = {
   acreditada: { icon: CheckCircle2, bg: 'bg-emerald-50 text-emerald-600' },
   rechazada: { icon: XCircle, bg: 'bg-rose-50 text-rose-500' },
   consumo: { icon: ShoppingBag, bg: 'bg-indigo-50 text-indigo-600' },
+  seguridad: { icon: KeyRound, bg: 'bg-violet-50 text-violet-600' },
   stock: { icon: AlertTriangle, bg: 'bg-amber-50 text-amber-600' },
   apertura: { icon: Store, bg: 'bg-emerald-50 text-emerald-600' },
   info: { icon: Bell, bg: 'bg-slate-100 text-slate-500' },
@@ -43,28 +46,26 @@ export default function TopBar() {
     config,
     updateConfig,
     notify,
-    pagosPendientes,
-    acreditarPago,
-    descartarPago,
+    solicitudesPendientes,
+    aprobarSolicitud,
+    descartarSolicitud,
     notificaciones,
     productos,
   } = useKiosco()
-  const [pagosOpen, setPagosOpen] = useState(false)
+  const [solicitudesOpen, setSolicitudesOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [acercaOpen, setAcercaOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
 
   const puedeAlternar = ROLES_MOSTRADOR.includes(session?.rol)
-  const pendientes = puedeAlternar ? pagosPendientes : []
+  const pendientes = puedeAlternar ? solicitudesPendientes : []
 
   /* ---------- Centro de notificaciones ---------- */
-  // Canal del feed: staff comparte bandeja; alumno/tutor filtran por su id.
+  // Canal del feed: staff comparte bandeja; el cliente filtra por su id.
   const claveFeed = session
-    ? session.rol === 'alumno'
-      ? `alumno:${session.id}`
-      : session.rol === 'tutor'
-        ? `tutor:${session.id}`
-        : 'staff'
+    ? session.rol === 'cliente'
+      ? `cliente:${session.id}`
+      : 'staff'
     : null
 
   const feed = useMemo(() => {
@@ -112,11 +113,15 @@ export default function TopBar() {
     notify(nuevo ? 'Kiosco abierto: mostrador habilitado.' : 'Kiosco cerrado temporalmente.', 'info')
   }
 
-  const acreditar = async (p) => {
-    setBusyId(p.id)
+  const aprobar = async (s) => {
+    setBusyId(s.id)
     try {
-      await acreditarPago(p.id)
-      notify(`Pago de ${money(p.monto)} acreditado a ${p.nombre}.`)
+      await aprobarSolicitud(s.id)
+      notify(
+        s.tipo === 'RESET_PIN'
+          ? `PIN de ${s.nombre} restablecido al temporal.`
+          : `Transferencia de ${money(s.monto)} acreditada a ${s.nombre}.`
+      )
     } catch (err) {
       notify(err.message, 'error')
     } finally {
@@ -124,11 +129,11 @@ export default function TopBar() {
     }
   }
 
-  const descartar = async (p) => {
-    setBusyId(p.id)
+  const descartar = async (s) => {
+    setBusyId(s.id)
     try {
-      await descartarPago(p.id)
-      notify(`Solicitud de ${p.nombre} descartada.`, 'info')
+      await descartarSolicitud(s.id)
+      notify(`Solicitud de ${s.nombre} descartada.`, 'info')
     } finally {
       setBusyId(null)
     }
@@ -150,7 +155,7 @@ export default function TopBar() {
                 <p className="text-sm font-bold leading-none text-slate-800">
                   Kiosco<span className="text-emerald-600">App</span>
                 </p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">{config.colegio}</p>
+                <p className="mt-0.5 truncate text-[11px] text-slate-400">{config.direccion}</p>
               </div>
             </button>
             <button
@@ -165,14 +170,24 @@ export default function TopBar() {
 
           {session && (
             <div className="flex items-center gap-2 sm:gap-3">
-              {puedeAlternar && pendientes.length > 0 && (
+              {/* Centro de solicitudes: contador de pendientes del mostrador */}
+              {puedeAlternar && (
                 <button
-                  onClick={() => setPagosOpen(true)}
-                  title="Ver pagos por acreditar"
-                  className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-200 transition-colors hover:bg-amber-100"
+                  onClick={() => setSolicitudesOpen(true)}
+                  title="Bandeja de solicitudes"
+                  className={`relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition-colors ${
+                    pendientes.length > 0
+                      ? 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
+                      : 'bg-slate-50 text-slate-500 ring-slate-200 hover:bg-slate-100'
+                  }`}
                 >
-                  <Hourglass size={13} />
-                  <span className="hidden sm:inline">Pagos por acreditar</span> ({pendientes.length})
+                  <Inbox size={13} />
+                  <span className="hidden sm:inline">Solicitudes</span>
+                  {pendientes.length > 0 && (
+                    <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                      {pendientes.length}
+                    </span>
+                  )}
                 </button>
               )}
               {puedeAlternar && (
@@ -190,7 +205,8 @@ export default function TopBar() {
                 </button>
               )}
 
-              {/* Campanita: centro de notificaciones unificado por rol */}
+              {/* Campanita: centro de notificaciones unificado por rol.
+                  Para el staff el contador suma las solicitudes pendientes. */}
               <button
                 onClick={() => setNotifOpen((v) => !v)}
                 title="Notificaciones"
@@ -200,9 +216,9 @@ export default function TopBar() {
                 }`}
               >
                 <Bell size={17} />
-                {noLeidas > 0 && (
+                {noLeidas + (puedeAlternar ? pendientes.length : 0) > 0 && (
                   <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white">
-                    {noLeidas > 99 ? '99+' : noLeidas}
+                    {noLeidas + (puedeAlternar ? pendientes.length : 0) > 99 ? '99+' : noLeidas + (puedeAlternar ? pendientes.length : 0)}
                   </span>
                 )}
               </button>
@@ -243,6 +259,14 @@ export default function TopBar() {
                     </button>
                   )}
                 </div>
+                {puedeAlternar && pendientes.length > 0 && (
+                  <button
+                    onClick={() => { setNotifOpen(false); setSolicitudesOpen(true) }}
+                    className="flex items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+                  >
+                    <Inbox size={14} /> {pendientes.length} solicitud(es) pendiente(s) de revisión →
+                  </button>
+                )}
                 <div className="max-h-[24rem] overflow-y-auto">
                   {feed.length === 0 ? (
                     <EmptyState
@@ -292,26 +316,44 @@ export default function TopBar() {
         </div>
       )}
 
-      {/* Acreditación rápida de transferencias informadas */}
-      <Modal open={pagosOpen} onClose={() => setPagosOpen(false)} title="Pagos por acreditar">
+      {/* Bandeja de solicitudes: recuperos de PIN y transferencias
+          informadas, listos para aprobar o descartar. */}
+      <Modal open={solicitudesOpen} onClose={() => setSolicitudesOpen(false)} title="Centro de Solicitudes">
         {pendientes.length === 0 ? (
-          <EmptyState icon={CheckCircle2} title="Sin pagos pendientes" sub="Todas las transferencias fueron procesadas." />
+          <EmptyState icon={CheckCircle2} title="Sin solicitudes pendientes" sub="Todos los pedidos fueron procesados." />
         ) : (
           <ul className="flex flex-col gap-2">
-            {pendientes.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
-                  <p className="text-xs text-slate-400">
-                    {fmtFechaHora(p.fechaHora)} · {p.tipo === 'recarga' ? 'Recarga de saldo' : 'Pago de deuda'} · informado por {p.origen}
-                  </p>
+            {pendientes.map((s) => (
+              <li key={s.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                      s.tipo === 'RESET_PIN' ? 'bg-violet-50 text-violet-600' : 'bg-amber-50 text-amber-600'
+                    }`}
+                  >
+                    {s.tipo === 'RESET_PIN' ? <KeyRound size={16} /> : <Hourglass size={16} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-800">{s.nombre}</p>
+                    <p className="text-xs text-slate-400">
+                      {fmtFechaHora(s.fechaHora)} ·{' '}
+                      {s.tipo === 'RESET_PIN'
+                        ? `Recupero de PIN · DNI ${s.dni}`
+                        : `${s.tipoOperacion === 'recarga' ? 'Recarga de saldo' : 'Pago de deuda'} · informada por ${s.origen}`}
+                    </p>
+                  </div>
+                  {s.tipo === 'TRANSFERENCIA_PENDIENTE' && <Badge tone="amber">{money(s.monto)}</Badge>}
                 </div>
-                <Badge tone="amber">{money(p.monto)}</Badge>
-                <div className="flex items-center gap-1">
-                  <Button size="sm" variant="success" onClick={() => acreditar(p)} disabled={busyId === p.id}>
-                    <CheckCircle2 size={13} /> {busyId === p.id ? 'Acreditando…' : 'Acreditar'}
+                <div className="mt-3 flex items-center gap-2">
+                  <Button size="sm" variant="success" className="flex-1" onClick={() => aprobar(s)} disabled={busyId === s.id}>
+                    <CheckCircle2 size={13} />
+                    {busyId === s.id
+                      ? 'Procesando…'
+                      : s.tipo === 'RESET_PIN'
+                        ? 'Aprobar y resetear a 1234'
+                        : 'Validar e impactar saldo'}
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => descartar(p)} disabled={busyId === p.id} className="text-slate-400 hover:text-rose-500" aria-label="Descartar solicitud">
+                  <Button size="sm" variant="ghost" onClick={() => descartar(s)} disabled={busyId === s.id} className="text-slate-400 hover:text-rose-500" aria-label="Descartar solicitud">
                     <X size={14} />
                   </Button>
                 </div>
@@ -320,7 +362,8 @@ export default function TopBar() {
           </ul>
         )}
         <p className="mt-3 text-[11px] text-slate-400">
-          Acreditar descuenta la deuda (o suma al saldo) y asienta el movimiento en la cuenta del alumno.
+          Resetear deja el PIN en 1234 (temporal). Validar una transferencia descuenta la deuda (o
+          suma al saldo) y asienta el movimiento en la cuenta del cliente.
         </p>
       </Modal>
 

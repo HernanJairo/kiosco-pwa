@@ -1,7 +1,7 @@
 import { avatarDe, fondoAvatar } from '../../utils/avatares'
 
-// Muestra la foto (DataURL), el avatar (emoji) o las iniciales del alumno.
-export default function AvatarAlumno({ alumno: a, className = 'h-10 w-10', emojiClassName = 'text-xl', textoClassName = 'text-xs' }) {
+// Muestra la foto (DataURL), el avatar (emoji) o las iniciales del cliente.
+export default function AvatarCliente({ cliente: a, className = 'h-10 w-10', emojiClassName = 'text-xl', textoClassName = 'text-xs' }) {
   if (!a) return null
   if (a.foto) {
     return (

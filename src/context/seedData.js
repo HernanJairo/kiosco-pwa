@@ -20,12 +20,12 @@ const hace = (dias, h = 12, m = 0) => {
 export function buildSeed() {
   return {
     config: {
-      nombreKiosco: 'Kiosco San Martín',
-      colegio: 'Escuela N°12 "Gral. San Martín"',
-      contacto: 'kiosco@sanmartin.edu.ar · 11 5555-0123',
-      horario: 'Lun a Vie · 7:45 a 13:00',
+      nombreKiosco: 'Kiosco Los Pinos',
+      direccion: 'Av. Rivadavia 1234 · Local 2',
+      contacto: 'kioscolospinos@gmail.com · 388 555-0123',
+      horario: 'Lun a Sáb · 8:00 a 20:00',
       whatsapp: '+5493881234567',
-      aliasPago: 'KIOSCO.SANMARTIN.MP',
+      aliasPago: 'KIOSCO.LOSPINOS.MP',
       cbuPago: '0000003100012345678901',
       limiteFiadoGlobal: 10000,
       abierto: true,
@@ -49,19 +49,21 @@ export function buildSeed() {
       { id: 'p15', nombre: 'Regla plástica 30 cm', categoria: 'Útiles', costo: 350, precio: 600, stock: 5, stockMin: 10, vencimiento: null },
     ],
 
-    alumnos: [
+    // Clientes registrados: el DNI es el identificador único de acceso.
+    // saldo = plata a favor (adelanto) · deuda = fiado pendiente.
+    // limiteFiado = tope propio de cuenta corriente (0 → usa el global del kiosco).
+    clientes: [
       {
-        id: 'a1',
+        id: 'c1',
         nombre: 'María',
         apellido: 'González',
         dni: '45111222',
         pin: '1234',
-        curso: '5° A',
-        tutorId: 't1',
+        telefono: '5493885551001',
         saldo: 2500,
         deuda: 4000,
+        limiteFiado: 0,
         avatar: 'unicornio',
-        limiteDiario: 2000,
         fiados: [
           {
             id: 'f1',
@@ -92,21 +94,20 @@ export function buildSeed() {
           { id: 'm4', fecha: hoy(10, 32), tipo: 'fiado', detalle: 'Compra fiada · 3 ítems', monto: 2000 },
           { id: 'm3', fecha: hace(2, 18, 15), tipo: 'abono', detalle: 'Pago de deuda · Transferencia', monto: -1500 },
           { id: 'm2', fecha: hace(3, 9, 50), tipo: 'fiado', detalle: 'Compra fiada · 2 ítems', monto: 2000 },
-          { id: 'm1', fecha: hace(6, 8, 0), tipo: 'recarga', detalle: 'Recarga de saldo · Tutor', monto: 5000 },
+          { id: 'm1', fecha: hace(6, 8, 0), tipo: 'recarga', detalle: 'Recarga de saldo · Kiosco', monto: 5000 },
         ],
       },
       {
-        id: 'a2',
+        id: 'c2',
         nombre: 'Juan',
-        apellido: 'González',
+        apellido: 'Pérez',
         dni: '46333444',
         pin: '4321',
-        curso: '3° B',
-        tutorId: 't1',
+        telefono: '5493885551002',
         saldo: 800,
         deuda: 1200,
+        limiteFiado: 5000,
         avatar: 'pelota',
-        limiteDiario: 1500,
         fiados: [
           {
             id: 'f3',
@@ -120,39 +121,37 @@ export function buildSeed() {
         ],
         movimientos: [
           { id: 'm5', fecha: hace(1, 12, 10), tipo: 'fiado', detalle: 'Compra fiada · 1 ítem', monto: 1500 },
-          { id: 'm6', fecha: hace(4, 9, 0), tipo: 'recarga', detalle: 'Recarga de saldo · Tutor', monto: 1000 },
+          { id: 'm6', fecha: hace(4, 9, 0), tipo: 'recarga', detalle: 'Recarga de saldo · Kiosco', monto: 1000 },
           { id: 'm7', fecha: hace(0, 8, 5), tipo: 'abono', detalle: 'Pago de deuda · Efectivo', monto: -300 },
         ],
       },
       {
-        id: 'a3',
+        id: 'c3',
         nombre: 'Sofía',
         apellido: 'Ramírez',
         dni: '47555666',
         pin: '1111',
-        curso: '6° A',
-        tutorId: 't2',
+        telefono: '5493885551003',
         saldo: 0,
         deuda: 0,
+        limiteFiado: 0,
         avatar: 'estrella',
-        limiteDiario: 0,
         fiados: [],
         movimientos: [
-          { id: 'm8', fecha: hace(5, 10, 0), tipo: 'recarga', detalle: 'Recarga de saldo · Tutor', monto: 3000 },
+          { id: 'm8', fecha: hace(5, 10, 0), tipo: 'recarga', detalle: 'Recarga de saldo · Kiosco', monto: 3000 },
         ],
       },
       {
-        id: 'a4',
+        id: 'c4',
         nombre: 'Lautaro',
         apellido: 'Díaz',
         dni: '48222111',
         pin: '2222',
-        curso: '4° C',
-        tutorId: null,
+        telefono: '',
         saldo: 5000,
         deuda: 4500,
+        limiteFiado: 8000,
         avatar: 'gorra',
-        limiteDiario: 0,
         fiados: [
           {
             id: 'f4',
@@ -187,17 +186,16 @@ export function buildSeed() {
         ],
       },
       {
-        id: 'a5',
+        id: 'c5',
         nombre: 'Camila',
         apellido: 'Torres',
         dni: '49101010',
         pin: '1010',
-        curso: '2° A',
-        tutorId: 't2',
+        telefono: '5493885551005',
         saldo: 1200,
         deuda: 600,
+        limiteFiado: 0,
         avatar: 'gato',
-        limiteDiario: 1000,
         fiados: [
           {
             id: 'f6',
@@ -211,27 +209,25 @@ export function buildSeed() {
         ],
         movimientos: [
           { id: 'm12', fecha: hace(4, 12, 40), tipo: 'fiado', detalle: 'Compra fiada · 1 ítem', monto: 600 },
-          { id: 'm13', fecha: hace(7, 9, 30), tipo: 'recarga', detalle: 'Recarga de saldo · Tutor', monto: 1500 },
+          { id: 'm13', fecha: hace(7, 9, 30), tipo: 'recarga', detalle: 'Recarga de saldo · Kiosco', monto: 1500 },
         ],
       },
     ],
 
-    tutores: [
-      { id: 't1', nombre: 'Carlos González', dni: '30123456', pin: '1234', telefono: '11 5555-1001', hijos: ['a1', 'a2'] },
-      { id: 't2', nombre: 'Laura Ramírez', dni: '29888777', pin: '7777', telefono: '11 5555-1002', hijos: ['a3', 'a5'] },
-    ],
-
     staff: [
-      { id: 's1', usuario: 'admin', clave: '1234', nombre: 'Dirección / Administración', rol: 'admin' },
+      { id: 's1', usuario: 'admin', clave: '1234', nombre: 'Dueña · Administración', rol: 'admin' },
       { id: 's2', usuario: 'vendedor', clave: '1234', nombre: 'Marcos · Mostrador', rol: 'vendedor' },
     ],
 
-    // Solicitudes de transferencia informadas por alumnos/tutores, a la espera
-    // de que el mostrador las acredite ({id, alumnoId, nombre, monto, fechaHora, estado, origen}).
-    pagosPendientes: [],
+    // Bandeja de solicitudes del mostrador (campana del staff):
+    //   RESET_PIN                → recupero de clave pedido desde el login
+    //   TRANSFERENCIA_PENDIENTE  → comprobante informado por un cliente
+    // {id, tipo, clienteId, nombre, monto?, tipoOperacion?, origen?, fechaHora, estado}
+    // estado: 'pendiente' | 'aprobada' | 'descartada'
+    solicitudes: [],
 
     // Feed del centro de notificaciones (campanita del TopBar):
-    // {id, fecha, para: 'staff' | '<rol>:<id>', texto, tipo}.
+    // {id, fecha, para: 'staff' | 'cliente:<id>', texto, tipo}.
     notificaciones: [],
 
     ventas: [
@@ -241,8 +237,8 @@ export function buildSeed() {
         items: [{ productoId: 'p13', nombre: 'Cuaderno rayado A5', cantidad: 1, precio: 2400, costo: 1500 }],
         total: 2400,
         metodo: 'efectivo',
-        alumnoId: null,
-        alumnoNombre: null,
+        clienteId: null,
+        clienteNombre: null,
         vendedor: 'vendedor',
         anulada: false,
       },
@@ -255,8 +251,8 @@ export function buildSeed() {
         ],
         total: 2000,
         metodo: 'fiado',
-        alumnoId: 'a1',
-        alumnoNombre: 'María González',
+        clienteId: 'c1',
+        clienteNombre: 'María González',
         vendedor: 'vendedor',
         anulada: false,
       },
@@ -269,8 +265,8 @@ export function buildSeed() {
         ],
         total: 2050,
         metodo: 'transferencia',
-        alumnoId: null,
-        alumnoNombre: null,
+        clienteId: null,
+        clienteNombre: null,
         vendedor: 'vendedor',
         anulada: false,
       },
@@ -283,8 +279,8 @@ export function buildSeed() {
         ],
         total: 2500,
         metodo: 'efectivo',
-        alumnoId: null,
-        alumnoNombre: null,
+        clienteId: null,
+        clienteNombre: null,
         vendedor: 'vendedor',
         anulada: false,
       },

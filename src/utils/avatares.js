@@ -1,5 +1,5 @@
-// Avatares predefinidos para personalizar el perfil del alumno sin usar
-// fotos reales (privacidad). `alumno.avatar` guarda la clave `k`.
+// Avatares predefinidos para personalizar el perfil del cliente sin usar
+// fotos reales (privacidad). `cliente.avatar` guarda la clave `k`.
 export const AVATARES = [
   { k: 'gorra', emoji: '🧢', nombre: 'Gorra' },
   { k: 'lentes', emoji: '🤓', nombre: 'Lentes' },

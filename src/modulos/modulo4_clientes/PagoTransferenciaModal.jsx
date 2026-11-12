@@ -7,19 +7,19 @@ import Modal from '../../components/ui/Modal'
 import Button from '../../components/ui/Button'
 import Input, { Select } from '../../components/ui/Input'
 
-export default function PagoTransferenciaModal({ alumno, origen = 'kiosco', open, onClose }) {
+export default function PagoTransferenciaModal({ cliente, origen = 'kiosco', open, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title="Pago / recarga">
-      {open && alumno && <FormPago alumno={alumno} origen={origen} onClose={onClose} />}
+      {open && cliente && <FormPago cliente={cliente} origen={origen} onClose={onClose} />}
     </Modal>
   )
 }
 
 // Se remonta en cada apertura: el estado inicial siempre refleja la deuda vigente.
-function FormPago({ alumno, origen, onClose }) {
-  const { config, registrarPago, solicitarTransferencia, notify, session, pagosPendientes } = useKiosco()
-  const [tipo, setTipo] = useState(alumno.deuda > 0 ? 'deuda' : 'recarga')
-  const [monto, setMonto] = useState(alumno.deuda > 0 ? String(alumno.deuda) : '')
+function FormPago({ cliente, origen, onClose }) {
+  const { config, registrarPago, solicitarTransferencia, notify, session, solicitudes } = useKiosco()
+  const [tipo, setTipo] = useState(cliente.deuda > 0 ? 'deuda' : 'recarga')
+  const [monto, setMonto] = useState(cliente.deuda > 0 ? String(cliente.deuda) : '')
   const [metodoPago, setMetodoPago] = useState('transferencia')
   const [waUrl, setWaUrl] = useState(null) // link de comprobante listo tras registrar
   const [copiado, setCopiado] = useState(null) // 'alias' | 'cbu'
@@ -28,16 +28,16 @@ function FormPago({ alumno, origen, onClose }) {
   // repinte el botón, evitando duplicados por toques accidentales.
   const enviando = useRef(false)
 
-  // Bloqueo anti-spam: si el alumno ya tiene una solicitud pendiente no se
+  // Bloqueo anti-spam: si el cliente ya tiene una solicitud pendiente no se
   // puede informar otra hasta que el mostrador la procese.
-  const enRevision = pagosPendientes.some((p) => p.alumnoId === alumno.id)
+  const enRevision = solicitudes.some((p) => p.clienteId === cliente.id && p.tipo === 'TRANSFERENCIA_PENDIENTE' && p.estado === 'pendiente')
 
-  // [C-2] El efectivo solo lo cobra el mostrador (vendedor/admin): alumnos y
-  // tutores solo pueden informar una transferencia pendiente de acreditación.
+  // [C-2] El efectivo solo lo cobra el mostrador (vendedor/admin): clientes y
+  // clientes solo pueden informar una transferencia pendiente de acreditación.
   const puedeEfectivo =
-    session?.rol !== 'alumno' && session?.rol !== 'tutor' && origen !== 'alumno' && origen !== 'tutor'
+    session?.rol !== 'cliente' && origen !== 'cliente'
 
-  const nombre = `${alumno.nombre} ${alumno.apellido}`
+  const nombre = `${cliente.nombre} ${cliente.apellido}`
   const montoNum = Number(monto) || 0
 
   const copiar = async (texto, campo) => {
@@ -52,7 +52,7 @@ function FormPago({ alumno, origen, onClose }) {
 
   const elegirTipo = (t) => {
     setTipo(t)
-    setMonto(t === 'deuda' ? String(alumno.deuda || '') : '')
+    setMonto(t === 'deuda' ? String(cliente.deuda || '') : '')
   }
 
   // a) Registra la solicitud como pendiente en KioscoContext.
@@ -65,8 +65,8 @@ function FormPago({ alumno, origen, onClose }) {
     enviando.current = true
     setBusy(true)
     try {
-      await solicitarTransferencia({ alumnoId: alumno.id, monto: montoNum, origen, tipo })
-      const texto = textoComprobante({ monto: montoNum, nombre, dni: alumno.dni })
+      await solicitarTransferencia({ clienteId: cliente.id, monto: montoNum, origen, tipo })
+      const texto = textoComprobante({ monto: montoNum, nombre, dni: cliente.dni })
       setWaUrl(waLink(config.whatsapp, texto))
       notify(`Transferencia de ${money(montoNum)} informada: pendiente de acreditación.`, 'info')
     } catch (err) {
@@ -83,8 +83,8 @@ function FormPago({ alumno, origen, onClose }) {
     enviando.current = true
     setBusy(true)
     try {
-      await registrarPago(alumno.id, montoNum, origen)
-      notify(`Pago de ${money(montoNum)} registrado para ${alumno.nombre}.`)
+      await registrarPago(cliente.id, montoNum, origen)
+      notify(`Pago de ${money(montoNum)} registrado para ${cliente.nombre}.`)
       onClose()
     } catch (err) {
       notify(err.message, 'error')
@@ -125,10 +125,10 @@ function FormPago({ alumno, origen, onClose }) {
       className="flex flex-col gap-3"
     >
       <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-inset ring-slate-200">
-        <b>{nombre}</b> · {alumno.curso}
+        <b>{nombre}</b> · DNI {cliente.dni}
         <br />
-        Deuda: <b className="text-rose-600">{money(alumno.deuda)}</b> · Saldo:{' '}
-        <b className="text-emerald-600">{money(alumno.saldo)}</b>
+        Deuda: <b className="text-rose-600">{money(cliente.deuda)}</b> · Saldo:{' '}
+        <b className="text-emerald-600">{money(cliente.saldo)}</b>
       </div>
 
       {enRevision && (

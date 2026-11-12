@@ -11,8 +11,8 @@ import Input from '../../components/ui/Input'
 import StatCard from '../../components/ui/StatCard'
 import EmptyState from '../../components/ui/EmptyState'
 
-export default function CobranzaAlumnos() {
-  const { alumnos, registrarPago, recargarSaldo, notify } = useKiosco()
+export default function CobranzaClientes() {
+  const { clientes, registrarPago, recargarSaldo, notify } = useKiosco()
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(null)
   const [accion, setAccion] = useState(null) // 'cobro' | 'recarga'
@@ -21,15 +21,15 @@ export default function CobranzaAlumnos() {
 
   const list = useMemo(
     () =>
-      alumnos
+      clientes
         .filter((a) =>
-          incluye(`${a.nombre} ${a.apellido} ${a.dni} ${a.curso}`, q)
+          incluye(`${a.nombre} ${a.apellido} ${a.dni} ${a.dni}`, q)
         )
         .sort((x, y) => y.deuda - x.deuda),
-    [alumnos, q]
+    [clientes, q]
   )
 
-  const a = alumnos.find((x) => x.id === sel)
+  const a = clientes.find((x) => x.id === sel)
 
   const abrir = (tipo) => {
     setMonto(tipo === 'cobro' ? String(a.deuda || '') : '')
@@ -58,7 +58,7 @@ export default function CobranzaAlumnos() {
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[340px_1fr]">
       {/* Buscador + listado */}
-      <Card title="Buscar alumno" subtitle="Por DNI, nombre, apellido o curso" className="h-fit">
+      <Card title="Buscar cliente" subtitle="Por DNI, nombre o apellido" className="h-fit">
         <div className="relative mb-3">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -86,7 +86,7 @@ export default function CobranzaAlumnos() {
                   <p className="truncate text-sm font-semibold text-slate-800">
                     {al.nombre} {al.apellido}
                   </p>
-                  <p className="text-[11px] text-slate-400">{al.curso} · DNI {al.dni}</p>
+                  <p className="text-[11px] text-slate-400">{al.dni} · DNI {al.dni}</p>
                 </div>
                 {al.deuda > 0 && <Badge tone="rose">{money(al.deuda)}</Badge>}
               </button>
@@ -96,14 +96,14 @@ export default function CobranzaAlumnos() {
         </ul>
       </Card>
 
-      {/* Detalle operativo del alumno */}
+      {/* Detalle operativo del cliente */}
       <div className="flex min-w-0 flex-col gap-5">
         {!a ? (
-          <EmptyState icon={Search} title="Seleccioná un alumno" sub="Buscá por DNI o nombre para ver su cuenta y cobrar." />
+          <EmptyState icon={Search} title="Seleccioná un cliente" sub="Buscá por DNI o nombre para ver su cuenta y cobrar." />
         ) : (
           <>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <StatCard icon={Wallet} tone="emerald" label="Saldo disponible" value={money(a.saldo)} sub={`${a.nombre} ${a.apellido} · ${a.curso}`} />
+              <StatCard icon={Wallet} tone="emerald" label="Saldo disponible" value={money(a.saldo)} sub={`${a.nombre} ${a.apellido} · ${a.dni}`} />
               <StatCard icon={NotebookPen} tone="rose" label="Deuda de fiados" value={money(a.deuda)} sub={`${a.fiados.filter((f) => !f.pagado).length} fiado(s) abierto(s)`} />
             </div>
 
@@ -138,8 +138,8 @@ export default function CobranzaAlumnos() {
 
             <div className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
               <Lock size={14} className="mt-0.5 shrink-0 text-slate-400" />
-              Vista operativa de mostrador: solo se muestran datos de cuenta del alumno. Los datos
-              personales del tutor (teléfono, correo, dirección) no están disponibles para este rol.
+              Vista operativa de mostrador: solo se muestran datos de cuenta del cliente. Los datos
+              personales del cliente (teléfono, correo, dirección) no están disponibles para este rol.
             </div>
           </>
         )}
@@ -153,7 +153,7 @@ export default function CobranzaAlumnos() {
         {a && accion && (
           <form onSubmit={confirmar} className="flex flex-col gap-3">
             <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-inset ring-slate-200">
-              <b>{a.nombre} {a.apellido}</b> · {a.curso} · DNI {a.dni}
+              <b>{a.nombre} {a.apellido}</b> · {a.dni} · DNI {a.dni}
               <br />
               Deuda: <b className="text-rose-600">{money(a.deuda)}</b> · Saldo:{' '}
               <b className="text-emerald-600">{money(a.saldo)}</b>

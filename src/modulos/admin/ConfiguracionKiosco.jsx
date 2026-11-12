@@ -152,7 +152,7 @@ export default function ConfiguracionKiosco() {
       <Card title="Configuración Raíz" subtitle="Ajustes globales del kiosco">
         <form onSubmit={guardar} className="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
           <Input label="Nombre del kiosco" value={form.nombreKiosco} onChange={(e) => setForm({ ...form, nombreKiosco: e.target.value })} required />
-          <Input label="Colegio / institución" value={form.colegio} onChange={(e) => setForm({ ...form, colegio: e.target.value })} required />
+          <Input label="Dirección / ubicación" value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} required />
           <Input label="Datos de contacto" value={form.contacto} onChange={(e) => setForm({ ...form, contacto: e.target.value })} />
           <Input label="Horario de atención" value={form.horario} onChange={(e) => setForm({ ...form, horario: e.target.value })} />
           <Input label="WhatsApp del kiosco (avisos de pago)" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} placeholder="+5493881234567" required />
@@ -243,7 +243,7 @@ export default function ConfiguracionKiosco() {
       <Card title="Zona de peligro" subtitle="Acciones sobre los datos de demostración">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-slate-500">
-            Restablece productos, alumnos, ventas, fiados y vendedores a los valores iniciales.
+            Restablece productos, clientes, ventas, fiados y vendedores a los valores iniciales.
           </p>
           <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
             <RefreshCcw size={14} /> Restablecer datos demo

@@ -30,24 +30,6 @@ export const diasHasta = (iso) => {
   return Math.round(diff / 86400000)
 }
 
-// División de curso asistida: letras -> mayúsculas ('a' -> 'A') y números
-// -> ordinales ('1' -> '1ra', '2' -> '2da'), para admitir tanto primaria
-// ("1° A") como secundaria ("5° 2da").
-const ORDINALES_DIV = {
-  1: '1ra', 2: '2da', 3: '3ra', 4: '4ta', 5: '5ta',
-  6: '6ta', 7: '7ma', 8: '8va', 9: '9na', 10: '10ma',
-}
-
-export const formatearDivision = (v) => {
-  const s = String(v ?? '')
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-  if (!s) return ''
-  const m = s.match(/^(\d{1,2})[A-Z]{0,2}$/)
-  if (m && ORDINALES_DIV[Number(m[1])]) return ORDINALES_DIV[Number(m[1])]
-  return s
-}
-
 export const diasTxt = (dias) => {
   if (dias === null) return 'Sin vencimiento'
   if (dias < 0) return `Venció hace ${-dias} día${-dias === 1 ? '' : 's'}`
