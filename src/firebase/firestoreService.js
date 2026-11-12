@@ -12,8 +12,11 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  increment,
   onSnapshot,
+  runTransaction,
   setDoc,
+  updateDoc,
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '../services/firebase'
@@ -134,3 +137,111 @@ export const upsertNotificacion = (notif) => mergear(COLECCIONES.notificaciones,
 
 // Parche del doc único de configuración (abierto, fiados, encargos…).
 export const updateConfigDoc = (patch) => setDoc(doc(db, ...DOC_CONFIG), patch, { merge: true })
+
+/* ================= ESCRITURAS ATÓMICAS (anti-sobreventa) ================= */
+//
+// El descuento de stock es la operación más delicada del kiosco: dos
+// dispositivos pueden cobrar la última unidad al mismo tiempo. Se
+// protege con runTransaction (relee el stock real en el servidor antes
+// de escribir) y, para las devoluciones, con increment() del lado del
+// servidor — que nunca pierde un ajuste aunque dos cajas sumen a la vez.
+
+// Venta + descuento de stock + impacto en billetera/fiado del cliente,
+// todo dentro de una única transacción. Si el stock remoto ya no
+// alcanza (otro dispositivo vendió primero) aborta y nada se escribe.
+export function registrarVentaAtomica({ venta, detalle, descontarStock = true, clienteDoc = null }) {
+  return runTransaction(db, async (tx) => {
+    const prodRefs = detalle.map((d) => doc(db, COLECCIONES.productos, String(d.productoId)))
+    const cliRef = clienteDoc ? doc(db, COLECCIONES.clientes, String(clienteDoc.id)) : null
+    const prodSnaps = await Promise.all(prodRefs.map((r) => tx.get(r)))
+    const cliSnap = cliRef ? await tx.get(cliRef) : null
+    if (descontarStock) {
+      prodSnaps.forEach((snap, i) => {
+        const actual = snap.exists() ? Number(snap.data().stock ?? 0) : 0
+        if (actual < detalle[i].cantidad) {
+          throw new Error(
+            `Sin stock remoto: ${detalle[i].nombre} quedó en ${actual} u. (otro dispositivo vendió antes).`
+          )
+        }
+      })
+      prodSnaps.forEach((snap, i) => {
+        if (snap.exists()) {
+          tx.update(prodRefs[i], { stock: Number(snap.data().stock) - detalle[i].cantidad })
+        }
+      })
+    }
+    tx.set(doc(db, COLECCIONES.ventas, String(venta.id)), venta)
+    if (cliRef && cliSnap?.exists()) tx.set(cliRef, clienteDoc, { merge: true })
+  })
+}
+
+// Reserva de encargo: mismo patrón — lee stock remoto, descuenta y
+// escribe el encargo en una sola transacción (nadie queda a medias).
+export function reservarEncargoAtomico(encargo) {
+  return runTransaction(db, async (tx) => {
+    const prodRefs = encargo.items.map((i) => doc(db, COLECCIONES.productos, String(i.productoId)))
+    const prodSnaps = await Promise.all(prodRefs.map((r) => tx.get(r)))
+    prodSnaps.forEach((snap, i) => {
+      const actual = snap.exists() ? Number(snap.data().stock ?? 0) : 0
+      if (actual < encargo.items[i].cantidad) {
+        throw new Error(
+          `Sin stock remoto para reservar: ${encargo.items[i].nombre} quedó en ${actual} u.`
+        )
+      }
+    })
+    prodSnaps.forEach((snap, i) => {
+      if (snap.exists()) {
+        tx.update(prodRefs[i], { stock: Number(snap.data().stock) - encargo.items[i].cantidad })
+      }
+    })
+    tx.set(doc(db, COLECCIONES.encargos, String(encargo.id)), encargo)
+  })
+}
+
+// Anulación de venta: la transacción relee la venta remota y aborta si
+// otro dispositivo ya la anuló (evita devolver el stock dos veces).
+export function anularVentaAtomica({ ventaId, clienteDoc = null }) {
+  return runTransaction(db, async (tx) => {
+    const vRef = doc(db, COLECCIONES.ventas, String(ventaId))
+    const cliRef = clienteDoc ? doc(db, COLECCIONES.clientes, String(clienteDoc.id)) : null
+    const vSnap = await tx.get(vRef)
+    const cliSnap = cliRef ? await tx.get(cliRef) : null
+    if (vSnap.exists() && vSnap.data().anulada) {
+      throw new Error('La venta ya fue anulada en otro dispositivo.')
+    }
+    const items = vSnap.exists() ? vSnap.data().items || [] : []
+    const prodRefs = items.map((i) => doc(db, COLECCIONES.productos, String(i.productoId)))
+    const prodSnaps = await Promise.all(prodRefs.map((r) => tx.get(r)))
+    prodSnaps.forEach((snap, i) => {
+      if (snap.exists()) tx.update(prodRefs[i], { stock: increment(items[i].cantidad) })
+    })
+    tx.set(vRef, { anulada: true }, { merge: true })
+    if (cliRef && cliSnap?.exists()) tx.set(cliRef, clienteDoc, { merge: true })
+  })
+}
+
+// Cancelación de encargo: relee el encargo remoto y aborta si ya fue
+// cerrado; devuelve la reserva con increment() (atómico en servidor).
+export function cancelarEncargoAtomico(encargoId) {
+  return runTransaction(db, async (tx) => {
+    const eRef = doc(db, COLECCIONES.encargos, String(encargoId))
+    const eSnap = await tx.get(eRef)
+    if (!eSnap.exists()) throw new Error('Encargo no encontrado en el servidor.')
+    const remoto = eSnap.data()
+    if (remoto.estado === 'entregado' || remoto.estado === 'cancelado') {
+      throw new Error('El encargo ya fue cerrado en otro dispositivo.')
+    }
+    const items = remoto.items || []
+    const prodRefs = items.map((i) => doc(db, COLECCIONES.productos, String(i.productoId)))
+    const prodSnaps = await Promise.all(prodRefs.map((r) => tx.get(r)))
+    prodSnaps.forEach((snap, i) => {
+      if (snap.exists()) tx.update(prodRefs[i], { stock: increment(items[i].cantidad) })
+    })
+    tx.update(eRef, { estado: 'cancelado' })
+  })
+}
+
+// Devolución puntual de stock (ajuste de encargo por faltante, etc.):
+// increment() se aplica en el servidor y es seguro entre dispositivos.
+export const sumarStock = (productoId, cantidad) =>
+  updateDoc(doc(db, COLECCIONES.productos, String(productoId)), { stock: increment(cantidad) })

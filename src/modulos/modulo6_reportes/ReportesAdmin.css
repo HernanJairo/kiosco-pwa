@@ -1,5 +1,10 @@
 /* Diseño v0 "Reportes y Analítica" (rama v0/yapa-reports-products),
    encapsulado bajo .analytics-view para no filtrar estilos al resto de la app. */
+.analytics-view{width:100%;max-width:100%;min-width:0;overflow-x:hidden}
+.analytics-view .legend-empty{margin:0;color:#9398a0;font-size:11px}
+.analytics-view .reco-note{margin:10px 0 0;color:#9398a0;font-size:9px}
+.analytics-view .reco-empty{margin:8px 0 0;color:#9398a0;font-size:10px}
+.analytics-view .table-empty{padding:18px 0;color:#9398a0;font-size:11px;text-align:center}
 .analytics-view .analytics-app{--yapa-blue:#009DE0;--yapa-ink:#202125;--yapa-muted:#777b85;--yapa-ice:#EBF7FD;--yapa-bg:#F8FAFC;--yapa-line:#edf0f2;--chart-1:#009DE0;--chart-2:#72BA91;--chart-3:#F1B95B;--chart-4:#E77C91;--chart-5:#9C8AD3;min-height:100svh;color:var(--yapa-ink);background:#fff;font-family:'Plus Jakarta Sans',sans-serif}
 .analytics-view .management-header{height:69px;border-bottom:1px solid #f1f3f4;background:#fff}
 .analytics-view .management-header-inner{display:flex;align-items:center;max-width:1160px;height:100%;gap:15px;margin:auto;padding:0 28px}
@@ -388,4 +393,90 @@
 .analytics-view .category-legend-row>strong{font-size:6px}
 .analytics-view .legend-name{font-size:6px}
 .analytics-view .form-row.three-fields{gap:5px}}
+/* ═══ Móvil Android (<640px): tipografía legible ≥12px, ancho completo
+   sin scroll lateral, KPIs en 2 columnas, filtros en grilla 2×2 y dona
+   apilada sobre la leyenda. Sobrescribe los breakpoints anteriores. ═══ */
+@media(max-width:640px){
+.analytics-view{width:100%;max-width:100%;overflow-x:hidden}
+.analytics-view *{min-width:0}
+/* Encabezado: exportar abajo a ancho completo, sin aplastar el título */
+.analytics-view .reports-heading{flex-direction:column;align-items:stretch;gap:12px}
+.analytics-view .reports-heading h1{font-size:24px}
+.analytics-view .reports-heading p{max-width:none;font-size:12px;line-height:1.5}
+.analytics-view .reports-kicker{font-size:12px}
+.analytics-view .export-button{width:100%;min-height:44px;font-size:13px}
+.analytics-view .export-button svg{width:16px;height:16px}
+/* Filtros de período: grilla 2×2 con botones cómodos */
+.analytics-view .report-controls{flex-direction:column;align-items:stretch;gap:10px}
+.analytics-view .period-pills{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;width:100%;padding:5px;overflow:visible}
+.analytics-view .period-pill{min-height:38px;padding:0 6px;font-size:13px;white-space:normal}
+.analytics-view .period-context{font-size:12px}
+.analytics-view .custom-date-range{align-self:stretch;justify-content:flex-end;font-size:12px}
+.analytics-view .custom-date-range label{font-size:12px}
+.analytics-view .custom-date-range input{height:36px;font-size:12px}
+/* KPIs: 2 columnas, padding amplio, etiqueta 12px, cifra grande */
+.analytics-view .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.analytics-view .kpi-card{min-height:0;padding:16px 14px}
+.analytics-view .kpi-icon{top:12px;right:12px}
+.analytics-view .kpi-label{max-width:calc(100% - 30px);margin-bottom:10px;font-size:12px;letter-spacing:.4px}
+.analytics-view .kpi-value{font-size:24px;letter-spacing:-.8px}
+.analytics-view .kpi-meta{margin-top:8px;font-size:12px}
+/* Tarjetas del reporte a una columna y a ancho completo */
+.analytics-view .main-report-grid{grid-template-columns:1fr}
+.analytics-view .report-card,.analytics-view .recommendation-card{width:100%;max-width:100%;overflow:hidden}
+.analytics-view .report-overline,.analytics-view .recommendation-label{font-size:12px}
+.analytics-view .report-card-heading h2,.analytics-view .section-title-row h2{font-size:17px}
+.analytics-view .insights-badge{font-size:12px}
+/* Dona arriba centrada, leyenda abajo a ancho completo */
+.analytics-view .category-chart-layout{display:flex;flex-direction:column;align-items:stretch;gap:12px;min-height:0}
+.analytics-view .donut-wrap{width:100%;max-width:230px;height:190px;margin:0 auto}
+.analytics-view .donut-center strong{font-size:18px}
+.analytics-view .donut-center span{font-size:12px}
+.analytics-view .category-legend{width:100%}
+.analytics-view .category-legend-row{grid-template-columns:minmax(0,1fr) auto 34px;min-height:36px;font-size:13px;gap:8px}
+.analytics-view .category-legend-row>strong{font-size:13px}
+.analytics-view .category-legend-row>span:last-child{font-size:12px}
+.analytics-view .legend-name{font-size:13px}
+.analytics-view .legend-empty{font-size:12px}
+/* Caja por método de pago: filas legibles sin desborde */
+.analytics-view .tender-row{min-height:46px;padding:8px 10px;gap:10px}
+.analytics-view .tender-symbol{flex:0 0 30px;width:30px;height:30px}
+.analytics-view .tender-title-line strong{font-size:13px;white-space:normal}
+.analytics-view .tender-title-line span{font-size:12px}
+.analytics-view .tender-amount{font-size:13px}
+.analytics-view .tender-footnote{font-size:12px}
+.analytics-view .tender-footnote>strong{font-size:12px}
+/* Recomendaciones: una columna, texto ≥12px */
+.analytics-view .recommendation-grid{grid-template-columns:1fr}
+.analytics-view .recommendation-card h3{font-size:15px}
+.analytics-view .recommendation-card h3,.analytics-view .pair-products span{white-space:normal}
+.analytics-view .pair-products span{font-size:12px}
+.analytics-view .pair-products>i{font-size:12px}
+.analytics-view .slow-product strong,.analytics-view .restock-product strong{font-size:13px}
+.analytics-view .slow-product small,.analytics-view .restock-product small{font-size:12px}
+.analytics-view .recommendation-result{font-size:12px}
+.analytics-view .recommendation-result>strong{font-size:13px}
+.analytics-view .promo-chip{font-size:12px!important}
+.analytics-view .low-stock-note{font-size:12px}
+.analytics-view .restock-product>b{font-size:12px}
+.analytics-view .reco-note{font-size:12px}
+.analytics-view .reco-empty{font-size:12px}
+/* Tabla top10: entra en pantalla sin scroll lateral */
+.analytics-view .bestseller-table-wrap{overflow-x:hidden}
+.analytics-view .bestseller-table{min-width:0}
+.analytics-view .bestseller-table th{height:26px;font-size:12px}
+.analytics-view .bestseller-table td{height:32px;font-size:13px}
+.analytics-view .bestseller-table th:first-child,.analytics-view .bestseller-table td:first-child{width:44%}
+.analytics-view .bestseller-table th:nth-child(2),.analytics-view .bestseller-table td:nth-child(2){width:20%}
+.analytics-view .bestseller-table th:nth-child(3),.analytics-view .bestseller-table td:nth-child(3){width:16%}
+.analytics-view .bestseller-table th:nth-child(4),.analytics-view .bestseller-table td:nth-child(4){width:20%}
+.analytics-view .bestseller-table th:last-child,.analytics-view .progress-cell{display:none}
+.analytics-view .bestseller-product-name{display:inline-block;max-width:100%;overflow:hidden;font-size:13px;text-overflow:ellipsis;vertical-align:middle;white-space:nowrap}
+.analytics-view .rank-number{width:20px;height:20px;margin-right:6px;font-size:12px}
+.analytics-view .table-category{display:inline-block;max-width:100%;overflow:hidden;font-size:12px;text-overflow:ellipsis;vertical-align:middle}
+.analytics-view .table-empty{font-size:12px}
+.analytics-view .units-cell,.analytics-view .revenue-cell{font-size:13px}
+.analytics-view .table-footer{font-size:12px}
+.analytics-view .report-disclaimer{font-size:12px;line-height:1.5;text-align:center}
+}
 @media(prefers-reduced-motion:reduce){.analytics-view .analytics-app *, .analytics-view .analytics-app *:before, .analytics-view .analytics-app *:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

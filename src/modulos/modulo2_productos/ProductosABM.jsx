@@ -130,21 +130,31 @@ export default function ProductosABM() {
       const categoria = form.categoria === NUEVA_CAT ? nuevaCat.trim() : form.categoria
       // `foto` queda sincronizada con la principal para retrocompat.
       const fotos = (form.fotos || []).map((f) => String(f).trim()).filter(Boolean)
+      const stockNum = Number(form.stock)
+      const stockMinNum = Number(form.stockMin)
       const data = {
         nombre: form.nombre.trim(),
         categoria,
         costo: Number(form.costo) || 0,
         precio: Number(form.precio) || 0,
-        stock: Math.max(0, Number(form.stock) || 0),
-        stockMin: Math.max(0, Number(form.stockMin) || 0),
+        stock: stockNum,
+        stockMin: stockMinNum,
         vencimiento: form.vencimiento || null,
         fotos,
         foto: fotos[0] || null,
         codigos: [...new Set(form.codigos.map((c) => String(c).trim()).filter(Boolean))],
       }
       if (!data.nombre) throw new Error('El nombre es obligatorio.')
+      if (data.nombre.length > 60) throw new Error('El nombre es demasiado largo (máx. 60 caracteres).')
       if (!data.categoria) throw new Error('Ingresá el nombre de la nueva categoría.')
       if (data.precio <= 0) throw new Error('El precio de venta debe ser mayor a 0.')
+      if (data.costo < 0) throw new Error('El costo no puede ser negativo.')
+      // El stock se valida explícito: un typo (-5) no se silencia a 0,
+      // se avisa para que el operador lo corrija.
+      if (Number.isNaN(stockNum)) throw new Error('El stock debe ser un número.')
+      if (stockNum < 0) throw new Error('El stock no puede ser negativo.')
+      if (Number.isNaN(stockMinNum)) throw new Error('El stock mínimo debe ser un número.')
+      if (stockMinNum < 0) throw new Error('El stock mínimo no puede ser negativo.')
       // Las fotos WebP viven dentro del documento de Firestore (tope
       // ~900 KB): se valida antes de guardar con un aviso amable.
       const bytes = tamanoDoc(data)

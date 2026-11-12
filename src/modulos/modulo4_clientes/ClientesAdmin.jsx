@@ -157,17 +157,17 @@ export default function ClientesAdmin() {
           ) : null
         }
       >
-        <div className="mb-4 flex gap-2">
+        <div className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:gap-2">
           <div className="relative flex-1">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar por nombre, DNI o teléfono…"
-              className="w-full rounded-lg border border-transparent bg-[#F6F6F6] py-2 pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
+              className="h-11 w-full rounded-lg border border-transparent bg-[#F6F6F6] pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft sm:h-auto sm:py-2"
             />
           </div>
-          <Button size="sm" onClick={() => setAltaOpen(true)} className="shrink-0">
+          <Button size="sm" onClick={() => setAltaOpen(true)} className="h-11 w-full shrink-0 justify-center sm:h-auto sm:w-auto">
             <UserPlus size={14} /> Nuevo Cliente
           </Button>
         </div>
@@ -177,37 +177,56 @@ export default function ClientesAdmin() {
         ) : (
           <ul className="flex flex-col gap-2">
             {list.map((c, idx) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-white shadow-soft px-4 py-3">
-                <div className="flex w-8 justify-center">
-                  {c.deuda > 0 && idx < 3 ? (
-                    <Medal size={18} className={MEDAL[idx]} />
-                  ) : (
-                    <span className="text-xs font-bold text-slate-300">#{idx + 1}</span>
-                  )}
+              <li key={c.id} className="flex flex-col gap-3 rounded-xl bg-white shadow-soft px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center">
+                {/* Fila 1 (móvil) / bloque identidad: medalla + nombre,
+                    DNI y teléfono completos debajo (sin cortes). */}
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  <div className="flex w-8 shrink-0 justify-center">
+                    {c.deuda > 0 && idx < 3 ? (
+                      <Medal size={18} className={MEDAL[idx]} />
+                    ) : (
+                      <span className="text-xs font-bold text-slate-300">#{idx + 1}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-bold text-slate-800 sm:truncate sm:text-sm sm:font-semibold">{c.nombre} {c.apellido}</p>
+                    <p className="text-xs text-slate-600 sm:truncate sm:text-slate-400">
+                      DNI {c.dni}
+                      {c.telefono ? ` · +${telefonoInternacional(c.telefono)}` : ' · Sin teléfono'}
+                      {c.email ? ` · ${c.email}` : ''}
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-800">{c.nombre} {c.apellido}</p>
-                  <p className="truncate text-xs text-slate-400">
-                    DNI {c.dni}
-                    {c.telefono ? ` · +${telefonoInternacional(c.telefono)}` : ' · Sin teléfono'}
-                    {c.email ? ` · ${c.email}` : ''}
-                  </p>
+                {/* Fila 2 (móvil): saldo y deuda en dos cajas anchas con
+                    etiqueta clara y monto grande. En desktop vuelven las
+                    pills compactas de siempre. */}
+                <div className="grid grid-cols-2 gap-2 sm:hidden">
+                  <div className="rounded-xl bg-emerald-50 px-3 py-2 ring-1 ring-inset ring-emerald-100">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700/80">Saldo</p>
+                    <p className="text-base font-extrabold text-emerald-700">{money(c.saldo)}</p>
+                  </div>
+                  <div className={`rounded-xl px-3 py-2 ring-1 ring-inset ${c.deuda > 0 ? 'bg-rose-50 ring-rose-100' : 'bg-slate-50 ring-slate-200'}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wide ${c.deuda > 0 ? 'text-rose-700/80' : 'text-slate-500'}`}>Deuda</p>
+                    <p className={`text-base font-extrabold ${c.deuda > 0 ? 'text-rose-600' : 'text-slate-600'}`}>{money(c.deuda)}</p>
+                  </div>
                 </div>
-                <Badge tone="emerald">Saldo {money(c.saldo)}</Badge>
-                <Badge tone={c.deuda > 0 ? 'rose' : 'slate'}>Deuda {money(c.deuda)}</Badge>
-                <div className="flex flex-wrap gap-1.5">
+                <Badge tone="emerald" className="hidden sm:inline-flex">Saldo {money(c.saldo)}</Badge>
+                <Badge tone={c.deuda > 0 ? 'rose' : 'slate'} className="hidden sm:inline-flex">Deuda {money(c.deuda)}</Badge>
+                {/* Fila 3 (móvil): acciones principales en grilla táctil de
+                    2 columnas con altura mínima 40px. */}
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
                   {/* Historial: visible para admin y vendedor */}
                   <button
                     type="button"
                     onClick={() => setHistDe(c)}
                     title={`Ver historial de ${c.nombre}`}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-[#EBF7FD] px-3.5 py-1.5 text-xs font-bold text-[#007AB8] transition-all duration-150 hover:bg-[#009DE0] hover:text-white active:scale-95"
+                    className="inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-full bg-[#EBF7FD] px-3 py-2 text-xs font-bold text-[#007AB8] transition-all duration-150 hover:bg-[#009DE0] hover:text-white active:scale-95 sm:min-h-0 sm:px-3.5 sm:py-1.5"
                   >
                     <History size={13} /> Historial
                   </button>
                   {/* Recarga de saldo prepago: operación habilitada también
                       para el vendedor */}
-                  <Button size="sm" variant="secondary" onClick={() => abrir(c, 'recarga')}>
+                  <Button size="sm" variant="secondary" onClick={() => abrir(c, 'recarga')} className="min-h-[40px] w-full sm:min-h-0 sm:w-auto">
                     <Wallet size={13} /> Recargar
                   </Button>
                   {!esVendedor && (
@@ -217,47 +236,54 @@ export default function ClientesAdmin() {
                         variant="secondary"
                         onClick={() => setFiadoDe(c)}
                         title="Cuenta corriente: habilitar, ajustar límite o bloquear"
+                        className="min-h-[40px] w-full sm:min-h-0 sm:w-auto"
                       >
                         <CreditCard size={13} /> Cta. Corriente
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setPinDe(c)}
-                        title="Restablecer PIN de acceso"
-                        aria-label={`Restablecer PIN de ${c.nombre}`}
-                      >
-                        <KeyRound size={14} />
-                      </Button>
-                      <a
-                        href={waLink(c.telefono || '', textoAccesoCliente({ cliente: c }))}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Compartir acceso por WhatsApp"
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand/20 bg-brand-soft px-2.5 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-blue-100"
-                      >
-                        <MessageCircle size={13} /> <span className="hidden sm:inline">WhatsApp</span>
-                      </a>
-                      <Button size="sm" variant="secondary" onClick={() => abrir(c, 'pago')} disabled={c.deuda <= 0}>
+                      <Button size="sm" variant="secondary" onClick={() => abrir(c, 'pago')} disabled={c.deuda <= 0} className="min-h-[40px] w-full sm:min-h-0 sm:w-auto">
                         <HandCoins size={13} /> Pago parcial
                       </Button>
-                      <Button size="sm" variant="success" onClick={() => setTotalDe(c)} disabled={c.deuda <= 0}>
+                      <Button size="sm" variant="success" onClick={() => setTotalDe(c)} disabled={c.deuda <= 0} className="col-span-2 min-h-[40px] w-full sm:min-h-0 sm:w-auto">
                         <CheckCircle2 size={13} /> Pago total
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setBajaDe(c)}
-                        disabled={c.deuda > 0}
-                        title={c.deuda > 0 ? 'No se puede eliminar: tiene deuda pendiente' : 'Eliminar cliente'}
-                        aria-label={`Eliminar ${c.nombre}`}
-                        className="text-slate-400 hover:text-rose-500"
-                      >
-                        <Trash2 size={14} />
                       </Button>
                     </>
                   )}
                 </div>
+                {/* Acciones secundarias al pie: PIN, WhatsApp y eliminar
+                    ordenadas sin amontonarse (en desktop quedan en línea). */}
+                {!esVendedor && (
+                  <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-2.5 sm:contents">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPinDe(c)}
+                      title="Restablecer PIN de acceso"
+                      aria-label={`Restablecer PIN de ${c.nombre}`}
+                    >
+                      <KeyRound size={14} />
+                    </Button>
+                    <a
+                      href={waLink(c.telefono || '', textoAccesoCliente({ cliente: c }))}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Compartir acceso por WhatsApp"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand/20 bg-brand-soft px-2.5 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-blue-100"
+                    >
+                      <MessageCircle size={13} /> <span className="hidden sm:inline">WhatsApp</span>
+                    </a>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setBajaDe(c)}
+                      disabled={c.deuda > 0}
+                      title={c.deuda > 0 ? 'No se puede eliminar: tiene deuda pendiente' : 'Eliminar cliente'}
+                      aria-label={`Eliminar ${c.nombre}`}
+                      className="text-slate-400 hover:text-rose-500"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>

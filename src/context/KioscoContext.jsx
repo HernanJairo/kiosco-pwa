@@ -290,6 +290,32 @@ export function KioscoProvider({ children }) {
       retiradoPor: retiradoPor || null,
     }
 
+    // Borrador con la venta aplicada: de ahí sale el doc del cliente que
+    // viaja dentro de la transacción (saldo/fiado/movimientos ya restados).
+    let clienteDoc = null
+    if (cliente) {
+      const draft = clone(db)
+      ops.aplicarVentaDb(draft, { venta, detalle, metodo, clienteId: cliente.id, descontarStock: !reservado })
+      if (!enEspera) ops.desbloquearFiadoDb(draft, cliente.id)
+      clienteDoc = draft.clientes.find((x) => x.id === cliente.id) || null
+    }
+
+    // Escritura remota PRIMERO dentro de runTransaction: relee el stock
+    // real del servidor antes de descontar — si otro dispositivo cobró la
+    // última unidad, la transacción aborta y acá NO se toca el estado.
+    // Solo un error de red/Firestore (con .code) cae al modo degradado
+    // clásico (mutación optimista + merge best-effort).
+    let remotoOk = false
+    if (remoto) {
+      try {
+        await fs.registrarVentaAtomica({ venta, detalle, descontarStock: !reservado, clienteDoc })
+        remotoOk = true
+      } catch (e) {
+        if (!e.code) throw e // regla de negocio remota (sin stock): se muestra al usuario
+        console.warn('[firebase] venta atómica falló, modo degradado:', e)
+      }
+    }
+
     let productosSync = []
     let clienteSync = null
     mutate((n) => {
@@ -348,9 +374,14 @@ export function KioscoProvider({ children }) {
         }
       }
     })
-    sync(fs.registrarVenta(venta))
-    if (!reservado) for (const p of productosSync) sync(fs.upsertProducto(p))
-    if (clienteSync) sync(fs.updateCliente(clienteSync.id, clienteSync))
+    // Cuando la transacción ya escribió todo en remoto no hace falta
+    // re-subir documento por documento; solo quedan los syncs sueltos del
+    // modo degradado (offline o Firestore caído).
+    if (!remotoOk) {
+      sync(fs.registrarVenta(venta))
+      if (!reservado) for (const p of productosSync) sync(fs.upsertProducto(p))
+      if (clienteSync) sync(fs.updateCliente(clienteSync.id, clienteSync))
+    }
     return venta
   }
 
@@ -375,6 +406,28 @@ export function KioscoProvider({ children }) {
     await sleep()
     const venta = db.ventas.find((v) => v.id === ventaId)
     if (!venta) throw new Error('Venta no encontrada.')
+
+    // Borrador con la reversa aplicada para el doc de cliente del tx.
+    let clienteDoc = null
+    if (venta.clienteId) {
+      const draft = clone(db)
+      ops.anularVentaDb(draft, ventaId)
+      clienteDoc = draft.clientes.find((x) => x.id === venta.clienteId) || null
+    }
+
+    // Transacción remota: relee la venta y aborta si otro dispositivo ya
+    // la anuló — sin ella se devolvería el stock dos veces.
+    let remotoOk = false
+    if (remoto) {
+      try {
+        await fs.anularVentaAtomica({ ventaId, clienteDoc })
+        remotoOk = true
+      } catch (e) {
+        if (!e.code) throw e
+        console.warn('[firebase] anulación atómica falló, modo degradado:', e)
+      }
+    }
+
     let productosSync = []
     let clienteSync = null
     mutate((n) => {
@@ -385,9 +438,11 @@ export function KioscoProvider({ children }) {
         .filter(Boolean)
       if (venta.clienteId) clienteSync = n.clientes.find((x) => x.id === venta.clienteId) || null
     })
-    sync(fs.registrarVenta({ ...venta, anulada: true }))
-    for (const p of productosSync) sync(fs.upsertProducto(p))
-    if (clienteSync) sync(fs.updateCliente(clienteSync.id, clienteSync))
+    if (!remotoOk) {
+      sync(fs.registrarVenta({ ...venta, anulada: true }))
+      for (const p of productosSync) sync(fs.upsertProducto(p))
+      if (clienteSync) sync(fs.updateCliente(clienteSync.id, clienteSync))
+    }
   }
 
   /* ================= CLIENTES ================= */
@@ -657,11 +712,33 @@ export function KioscoProvider({ children }) {
     if (!config.recibiendoEncargos || config.encargosActivos === false) {
       throw new Error('Los encargos están pausados temporalmente.')
     }
-    let creado = null
+    // El encargo se construye sobre un borrador para reservar el stock
+    // remoto dentro de una transacción ANTES de tocar el estado local:
+    // si otra caja se llevó la última unidad, el pedido ni siquiera se
+    // crea localmente.
+    const draft = clone(db)
+    const creado = ops.nuevoEncargo(draft, { clienteId: clienteSesion.id, items, retiroTercero })
+    let remotoOk = false
+    if (remoto) {
+      try {
+        await fs.reservarEncargoAtomico(creado)
+        remotoOk = true
+      } catch (e) {
+        if (!e.code) throw e
+        console.warn('[firebase] reserva de encargo atómica falló, modo degradado:', e)
+      }
+    }
+
     let productosSync = []
     mutate((n) => {
-      creado = ops.nuevoEncargo(n, { clienteId: clienteSesion.id, items, retiroTercero })
-      // El encargo reserva stock: los productos descontados también viajan.
+      // Se replica el efecto del borrador con el MISMO encargo (mismo
+      // id): reservar stock e insertarlo al tope de la lista.
+      for (const it of creado.items) {
+        const p = n.productos.find((x) => x.id === it.productoId)
+        if (p) p.stock -= it.cantidad
+      }
+      if (!Array.isArray(n.encargos)) n.encargos = []
+      n.encargos.unshift(creado)
       productosSync = creado.items
         .map((i) => n.productos.find((x) => x.id === i.productoId))
         .filter(Boolean)
@@ -674,7 +751,7 @@ export function KioscoProvider({ children }) {
         creado.clienteNombre
       )
     })
-    if (creado) {
+    if (!remotoOk) {
       sync(fs.upsertEncargo(creado))
       for (const p of productosSync) sync(fs.upsertProducto(p))
     }
@@ -687,8 +764,11 @@ export function KioscoProvider({ children }) {
     await sleep(60)
     let e = null
     let productoSync = null
+    let devuelto = 0
     mutate((n) => {
+      const antes = n.productos.find((x) => x.id === productoId)?.stock ?? 0
       e = ops.ajustarItemEncargoDb(n, encargoId, productoId, cantidadQuitar, { ajustadoPor: session?.nombre })
+      devuelto = (n.productos.find((x) => x.id === productoId)?.stock ?? 0) - antes
       productoSync = n.productos.find((x) => x.id === productoId) || null
       const item = (e.itemsFaltantes || []).find((f) => f.productoId === productoId)
       avisar(
@@ -702,8 +782,10 @@ export function KioscoProvider({ children }) {
     })
     if (e) {
       sync(fs.upsertEncargo(e))
-      // El faltante devuelve la reserva a la góndola.
-      if (productoSync) sync(fs.upsertProducto(productoSync))
+      // El faltante devuelve la reserva a la góndola con increment()
+      // atómico: dos ajustes simultáneos nunca se pisan.
+      if (devuelto > 0) sync(fs.sumarStock(productoId, devuelto))
+      else if (productoSync) sync(fs.upsertProducto(productoSync))
     }
     return e
   }
@@ -777,6 +859,18 @@ export function KioscoProvider({ children }) {
 
   const cancelarEncargo = async (encargoId) => {
     await sleep(60)
+    // Transacción remota primero: relee el encargo y aborta si otro
+    // dispositivo ya lo cerró (evita devolver la reserva dos veces).
+    let remotoOk = false
+    if (remoto) {
+      try {
+        await fs.cancelarEncargoAtomico(encargoId)
+        remotoOk = true
+      } catch (e2) {
+        if (!e2.code) throw e2
+        console.warn('[firebase] cancelación de encargo atómica falló, modo degradado:', e2)
+      }
+    }
     let e = null
     let productosSync = []
     mutate((n) => {
@@ -803,7 +897,7 @@ export function KioscoProvider({ children }) {
         )
       }
     })
-    if (e) {
+    if (e && !remotoOk) {
       sync(fs.upsertEncargo(e))
       for (const p of productosSync) sync(fs.upsertProducto(p))
     }

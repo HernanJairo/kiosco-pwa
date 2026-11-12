@@ -106,7 +106,7 @@ export default function ReportesAdmin() {
   const topMax = Math.max(1, ...stats.top10.map((t) => t.cant))
 
   return (
-    <div className="analytics-view">
+    <div className="analytics-view w-full max-w-full min-w-0 overflow-x-hidden">
       <section className="reports-heading">
         <div>
           <span className="reports-kicker">TU NEGOCIO, EN UN VISTAZO</span>
@@ -226,7 +226,7 @@ export default function ReportesAdmin() {
             </div>
             <div className="category-legend" role="list" aria-label="Detalle de ventas por categoría">
               {categorias.length === 0 ? (
-                <p style={{ margin: 0, fontSize: 11, color: '#9398a0' }}>Sin ventas en el período elegido.</p>
+                <p className="legend-empty">Sin ventas en el período elegido.</p>
               ) : (
                 categorias.map((c) => (
                   <div className="category-legend-row" key={c.name} role="listitem">
@@ -295,13 +295,13 @@ export default function ReportesAdmin() {
                   <strong>{money(comboTop.precioCombo)} <ArrowRight size={14} /></strong>
                 </div>
                 {reco.combos.length > 1 && (
-                  <p style={{ margin: '10px 0 0', fontSize: 9, color: '#9398a0' }}>
+                  <p className="reco-note">
                     También: {reco.combos.slice(1).map((c) => `${c.pa.nombre} + ${c.pb.nombre}`).join(' · ')}
                   </p>
                 )}
               </>
             ) : (
-              <p style={{ margin: '8px 0 0', fontSize: 10, color: '#9398a0' }}>Todavía no hay pares repetidos en los tickets.</p>
+              <p className="reco-empty">Todavía no hay pares repetidos en los tickets.</p>
             )}
           </article>
 
@@ -323,13 +323,13 @@ export default function ReportesAdmin() {
                   <strong className="promo-chip">Promo 2x1</strong>
                 </div>
                 {reco.rotacion.length > 1 && (
-                  <p style={{ margin: '10px 0 0', fontSize: 9, color: '#9398a0' }}>
+                  <p className="reco-note">
                     También: {reco.rotacion.slice(1).map((r) => r.p.nombre).join(' · ')}
                   </p>
                 )}
               </>
             ) : (
-              <p style={{ margin: '8px 0 0', fontSize: 10, color: '#9398a0' }}>Sin productos estancados: todo el stock rota bien.</p>
+              <p className="reco-empty">Sin productos estancados: todo el stock rota bien.</p>
             )}
           </article>
 
@@ -352,13 +352,13 @@ export default function ReportesAdmin() {
                   <strong className="restock-action">Reponer hoy</strong>
                 </div>
                 {reco.reposicion.length > 1 && (
-                  <p style={{ margin: '10px 0 0', fontSize: 9, color: '#9398a0' }}>
+                  <p className="reco-note">
                     También: {reco.reposicion.slice(1).map((r) => r.p.nombre).join(' · ')}
                   </p>
                 )}
               </>
             ) : (
-              <p style={{ margin: '8px 0 0', fontSize: 10, color: '#9398a0' }}>Ningún producto por debajo de su mínimo.</p>
+              <p className="reco-empty">Ningún producto por debajo de su mínimo.</p>
             )}
           </article>
         </div>
@@ -385,7 +385,7 @@ export default function ReportesAdmin() {
             </thead>
             <tbody>
               {stats.top10.length === 0 ? (
-                <tr><td colSpan="5" style={{ padding: '18px 0', textAlign: 'center', color: '#9398a0', fontSize: 11 }}>No hay ventas en el período elegido.</td></tr>
+                <tr><td colSpan="5" className="table-empty">No hay ventas en el período elegido.</td></tr>
               ) : (
                 stats.top10.map((t, i) => (
                   <tr key={t.nombre}>

@@ -16,6 +16,7 @@ import {
   deleteDoc,
   collection,
   getDocs,
+  runTransaction,
   terminate,
 } from 'firebase/firestore'
 import * as ops from '../src/context/operaciones.js'
@@ -193,25 +194,41 @@ await rechaza(() => Promise.resolve(ops.validarVenta(d, { items: [{ productoId: 
 const { total: tExc } = ops.validarVenta(d, { items: [{ productoId: PROD.id, cantidad: 3 }], metodo: 'fiado', clienteId: cliente.id, excepcionFiado: true })
 check(tExc > 0, 'excepción expresa del vendedor permite superar el límite')
 
-/* ---------- 7. Carrera de stock entre dos dispositivos ---------- */
-console.log('\n— 7. Concurrencia real: dos dispositivos, última unidad —')
+/* ---------- 7. Carrera de stock: transacción atómica ---------- */
+console.log('\n— 7. Concurrencia real: transacción anti-sobreventa —')
+// Réplica del patrón de fs.registrarVentaAtomica contra el doc real:
+// dos transacciones compiten por la última unidad; la perdedora reintenta,
+// relee stock=0 y aborta. Nada de last-write-wins.
 await setDoc(doc(dbA, 'productos', PROD.id), { stock: 1 }, { merge: true })
-const [da, db2] = await Promise.all([leerDb(dbA), leerDb(dbB)])
-const stockA = da.productos.find((p) => p.id === PROD.id).stock
-const stockB = db2.productos.find((p) => p.id === PROD.id).stock
-check(stockA === 1 && stockB === 1, 'ambos dispositivos leen stock=1')
-// Ambos validan OK y escriben stock=0 — último en escribir gana.
-let validoA = true, validoB = true
-try { ops.validarVenta(da, { items: [{ productoId: PROD.id, cantidad: 1 }], metodo: 'efectivo' }) } catch { validoA = false }
-try { ops.validarVenta(db2, { items: [{ productoId: PROD.id, cantidad: 1 }], metodo: 'efectivo' }) } catch { validoB = false }
-check(validoA && validoB, 'AMBOS dispositivos validan la venta de la última unidad (race)')
-await Promise.all([
-  setDoc(doc(dbA, 'productos', PROD.id), { stock: 0 }, { merge: true }),
-  setDoc(doc(dbB, 'productos', PROD.id), { stock: 0 }, { merge: true }),
-])
+const ventaRace = (tag) => ({
+  id: `${TAG}_race_${tag}`,
+  fecha: new Date().toISOString(),
+  metodo: 'efectivo',
+  clienteId: null,
+  vendedor: 'qa',
+  anulada: false,
+  estado: 'completada',
+  total: PROD.precio,
+  items: [{ productoId: PROD.id, nombre: PROD.nombre, cantidad: 1, precio: PROD.precio }],
+})
+const txVenta = (dbX, tag) =>
+  runTransaction(dbX, async (tx) => {
+    const ref = doc(dbX, 'productos', PROD.id)
+    const snap = await tx.get(ref)
+    const actual = snap.data()?.stock ?? 0
+    if (actual < 1) throw new Error('Sin stock remoto (otro dispositivo vendió antes).')
+    tx.update(ref, { stock: actual - 1 })
+    tx.set(doc(dbX, 'ventas', `${TAG}_race_${tag}`), ventaRace(tag))
+  })
+const resultados = await Promise.allSettled([txVenta(dbA, 'a'), txVenta(dbB, 'b')])
+const exitosas = resultados.filter((r) => r.status === 'fulfilled').length
+creados.push({ col: 'ventas', id: `${TAG}_race_a` }, { col: 'ventas', id: `${TAG}_race_b` })
+check(exitosas === 1, `exactamente 1 dispositivo cobró la última unidad (${exitosas} de 2)`)
 const final = await getDoc(doc(dbA, 'productos', PROD.id))
-console.log(`    · stock final remoto: ${final.data().stock} — se vendieron 2 unidades de 1 disponible`)
-ko('SOBREVENTA confirmada: sin transacciones, dos dispositivos pueden vender la misma última unidad (last-write-wins)')
+check(final.data().stock === 0, `stock final remoto ${final.data().stock}: sin sobreventa`)
+const raceDocs = await getDocs(collection(dbA, 'ventas'))
+const ventasRace = raceDocs.docs.filter((x) => x.id.startsWith(`${TAG}_race_`))
+check(ventasRace.length === 1, `solo existe 1 ticket remoto de la carrera (${ventasRace.length})`)
 
 /* ---------- 8. Guarda de tamaño y reportes ---------- */
 console.log('\n— 8. Guarda de tamaño y consistencia de reportes —')
@@ -226,7 +243,9 @@ const sumaManual = d.ventas.filter((v) => !v.anulada && v.estado !== 'en_espera_
 check(stats.total === sumaManual, `reportes: total del período == Σ ventas válidas ($ ${sumaManual.toLocaleString('es-AR')})`)
 const ventasQa = d.ventas.filter((v) => v.id.startsWith(TAG) && !v.anulada)
 const totalQa = ventasQa.reduce((s, v) => s + v.total, 0)
-check(totalQa === (5 * PROD.precio + totE), `matemática de pruebas consistente (válidas QA = $ ${totalQa.toLocaleString('es-AR')})`)
+// 5 unidades de la venta multi-ítem + totE del encargo cobrado +
+// 1 unidad que ganó la carrera transaccional del §7.
+check(totalQa === (6 * PROD.precio + totE), `matemática de pruebas consistente (válidas QA = $ ${totalQa.toLocaleString('es-AR')})`)
 
 /* ---------- 9. Limpieza ---------- */
 console.log('\n— 9. Limpieza de datos de prueba —')
