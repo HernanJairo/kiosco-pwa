@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronUp, Grid2X2, HandCoins, Hourglass, Landmark, Loader2, Minus, PackageCheck, Plus, ScanLine, Search, ShoppingCart, Trash2, Wallet, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { incluye, norm } from '../../utils/busqueda'
@@ -10,7 +10,7 @@ import Modal from '../../components/ui/Modal'
 import AvatarCliente from '../../components/ui/AvatarCliente'
 import ProductoImg from '../../components/ui/ProductoImg'
 import FotosPill from '../../components/ui/FotosPill'
-import { iconoCategoria } from '../../utils/icons'
+import IconoCat from '../../components/ui/IconoCat'
 import EscanerCamara from '../../components/ui/EscanerCamara'
 import TicketVenta from './TicketVenta'
 import { limiteFiadoVigente } from '../../context/operaciones'
@@ -723,7 +723,7 @@ export default function TerminalPOS() {
                 onClick={() => setCat(cat === c ? 'Todas' : c)}
               >
                 <span className="category-art" aria-hidden="true">
-                  {createElement(iconoCategoria(c), { size: 23, strokeWidth: 1.9 })}
+                  <IconoCat categoria={c} size={23} strokeWidth={1.9} />
                 </span>
                 <span>{c}</span>
               </button>
@@ -752,7 +752,7 @@ export default function TerminalPOS() {
                           <>
                             <span className="art-orbit" />
                             <span className="art-icon">
-                              {createElement(iconoCategoria(p.categoria), {})}
+                              <IconoCat categoria={p.categoria} />
                             </span>
                             <span className="art-shine" />
                           </>

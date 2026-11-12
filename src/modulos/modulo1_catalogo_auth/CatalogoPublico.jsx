@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, BadgeCheck, Candy, Check, ChevronDown, Cookie, CupSoda, Grid2X2, Loader2, Minus, Package, Pencil, Plus, Popcorn, Sandwich, Search, ShoppingCart, Store, X, Zap } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BadgeCheck, Check, ChevronDown, Grid2X2, Loader2, Minus, Plus, Search, ShoppingCart, Store, X, Zap } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { incluye } from '../../utils/busqueda'
 import { fotosDe } from '../../utils/imagen'
 import { diasHasta, diasTxt, fmtFecha, money } from '../../utils/format'
 import GaleriaProducto from '../../components/ui/GaleriaProducto'
 import FotosPill from '../../components/ui/FotosPill'
+import IconoCat from '../../components/ui/IconoCat'
 import PedidoQRModal from '../modulo4_clientes/PedidoQRModal'
 import './CatalogoPublico.css'
 
@@ -17,17 +18,9 @@ import './CatalogoPublico.css'
 const TONOS = ['blue', 'yellow', 'pink', 'mint', 'aqua', 'lilac']
 const ILIMITADO = 999 // stock 999 = venta libre sin tope
 
-// Ícono lucide por categoría (coincidencia por palabra clave).
-function IconoCategoria({ cat = '', ...props }) {
-  const s = cat.toLowerCase()
-  if (/bebida|jugo|agua|gaseosa|cerveza|vino|licor/.test(s)) return <CupSoda {...props} />
-  if (/snack|papa|nacho|man[ií]|salad/.test(s)) return <Popcorn {...props} />
-  if (/gallet|alfajor|cookie/.test(s)) return <Cookie {...props} />
-  if (/almuer|s[áa]ndwich|sandwich|empanada|comida|picada/.test(s)) return <Sandwich {...props} />
-  if (/almac|golos|caramelo|chocolate|dulce|confite/.test(s)) return <Candy {...props} />
-  if (/[úu]til|librer|escolar|l[áa]piz|cuaderno/.test(s)) return <Pencil {...props} />
-  return <Package {...props} />
-}
+// Ícono de categoría: emoji elegido por el admin o lucide por palabra
+// clave (IconoCat lee config.iconosCategorias del contexto).
+const IconoCategoria = ({ cat = '', ...props }) => <IconoCat categoria={cat} {...props} />
 
 const stockTope = (p) => (p.stock >= ILIMITADO ? 99 : p.stock)
 const sinStock = (p) => p.stock <= 0

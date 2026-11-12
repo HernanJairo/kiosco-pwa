@@ -1,4 +1,4 @@
-import { createElement, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Barcode, Camera, Grid2X2, ImagePlus, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { incluye } from '../../utils/busqueda'
@@ -14,11 +14,25 @@ import Input, { Select } from '../../components/ui/Input'
 import EmptyState from '../../components/ui/EmptyState'
 import ProductoDetalleModal from '../../components/ui/ProductoDetalleModal'
 import FotosPill from '../../components/ui/FotosPill'
-import { iconoCategoria } from '../../utils/icons'
+import IconoCat from '../../components/ui/IconoCat'
 import '../modulo1_catalogo_auth/CatalogoPublico.css'
 
 const VACIO = { nombre: '', categoria: 'Bebidas', costo: '', precio: '', stock: '', stockMin: '', vencimiento: '', fotos: [], codigos: [] }
 const NUEVA_CAT = '__nueva__'
+
+// Emojis típicos de kiosco/almacén para identificar categorías nuevas.
+const EMOJIS_CAT = ['🥤', '🧃', '🍪', '🍫', '🍬', '🍭', '🥪', '🍕', '🥐', '🥟', '🍿', '🥜', '🍦', '☕', '🧉', '🥛', '🍎', '🍌', '🥖', '🧀', '🧼', '📓', '✏️', '📦']
+
+// Toma el primer grafema del texto (un emoji completo, con ZWJ/VS16).
+const primerGrafema = (s) => {
+  const t = String(s || '').trim()
+  if (!t) return ''
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const seg = new Intl.Segmenter('es', { granularity: 'grapheme' })
+    return [...seg.segment(t)][0]?.segment || ''
+  }
+  return [...t][0]
+}
 
 // Tonos pastel por categoría (misma paleta del catálogo v0).
 const TONOS_CAT = [
@@ -31,11 +45,13 @@ const TONOS_CAT = [
 ]
 
 export default function ProductosABM() {
-  const { productos, categorias, addProducto, updateProducto, deleteProducto, notify } = useKiosco()
+  const { productos, categorias, config, updateConfig, addProducto, updateProducto, deleteProducto, notify } = useKiosco()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('Todas')
   const [form, setForm] = useState(null) // null | VACIO | producto
   const [nuevaCat, setNuevaCat] = useState('')
+  const [emojiCat, setEmojiCat] = useState('📦')
+  const [emojiLibre, setEmojiLibre] = useState('')
   const [codigoInput, setCodigoInput] = useState('')
   const [urlFoto, setUrlFoto] = useState('')
   const [conflicto, setConflicto] = useState(null) // {codigo, duenio}
@@ -163,6 +179,16 @@ export default function ProductosABM() {
           `"${data.nombre}" pesa ~${Math.round(bytes / 1024)} KB (máximo ~900 KB). Quitá alguna foto del producto.`
         )
       }
+      // Si se creó una categoría nueva, su emoji queda guardado en la
+      // config del kiosco y se sincroniza a todos los dispositivos.
+      if (form.categoria === NUEVA_CAT) {
+        const elegido = primerGrafema(emojiLibre) || emojiCat
+        if (elegido) {
+          await updateConfig({
+            iconosCategorias: { ...(config.iconosCategorias || {}), [data.categoria]: elegido },
+          })
+        }
+      }
       if (form.id) {
         await updateProducto(form.id, data)
         notify('Producto actualizado.')
@@ -170,6 +196,9 @@ export default function ProductosABM() {
         await addProducto(data)
         notify('Producto creado.')
       }
+      setNuevaCat('')
+      setEmojiLibre('')
+      setEmojiCat('📦')
       setForm(null)
     } catch (err) {
       notify(err.message, 'error')
@@ -191,7 +220,7 @@ export default function ProductosABM() {
       title="Gestión de Productos"
       subtitle="Alta, baja y modificación del inventario"
       actions={
-        <Button size="sm" onClick={() => { setNuevaCat(''); setForm({ ...VACIO }) }}>
+        <Button size="sm" onClick={() => { setNuevaCat(''); setEmojiLibre(''); setEmojiCat('📦'); setForm({ ...VACIO }) }}>
           <Plus size={14} /> Nuevo producto
         </Button>
       }
@@ -230,7 +259,7 @@ export default function ProductosABM() {
                 onClick={() => setCat(cat === c ? 'Todas' : c)}
               >
                 <span className="category-art" aria-hidden="true">
-                  {createElement(iconoCategoria(c), { size: 23, strokeWidth: 1.9 })}
+                  <IconoCat categoria={c} size={23} strokeWidth={1.9} />
                 </span>
                 <span>{c}</span>
               </button>
@@ -260,7 +289,7 @@ export default function ProductosABM() {
                     {fotos.length ? (
                       <img src={fotos[0]} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
                     ) : (
-                      createElement(iconoCategoria(p.categoria), { size: 24, strokeWidth: 1.9, className: tono.ink })
+                      <IconoCat categoria={p.categoria} size={24} strokeWidth={1.9} className={tono.ink} />
                     )}
                     <FotosPill cantidad={fotos.length} />
                   </div>
@@ -313,7 +342,7 @@ export default function ProductosABM() {
         </div>
       )}
 
-      <Modal open={!!form} onClose={() => { setNuevaCat(''); setForm(null) }} title={form?.id ? 'Editar producto' : 'Nuevo producto'} wide>
+      <Modal open={!!form} onClose={() => { setNuevaCat(''); setEmojiLibre(''); setEmojiCat('📦'); setForm(null) }} title={form?.id ? 'Editar producto' : 'Nuevo producto'} wide>
         {form && (
           <form onSubmit={guardar} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
@@ -322,19 +351,51 @@ export default function ProductosABM() {
             <div>
               <Select label="Categoría" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
                 {categorias.map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c}>{`${config.iconosCategorias?.[c] ? `${config.iconosCategorias[c]} ` : ''}${c}`}</option>
                 ))}
                 <option value={NUEVA_CAT}>+ Nueva categoría…</option>
               </Select>
               {form.categoria === NUEVA_CAT && (
-                <Input
-                  className="mt-2"
-                  autoFocus
-                  value={nuevaCat}
-                  onChange={(e) => setNuevaCat(e.target.value)}
-                  placeholder="Nombre de la nueva categoría"
-                  required
-                />
+                <>
+                  <Input
+                    className="mt-2"
+                    autoFocus
+                    value={nuevaCat}
+                    onChange={(e) => setNuevaCat(e.target.value)}
+                    placeholder="Nombre de la nueva categoría"
+                    required
+                  />
+                  <div className="mt-2.5">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-600">Ícono de la categoría</span>
+                    <div className="grid grid-cols-6 gap-1.5">
+                      {EMOJIS_CAT.map((e) => (
+                        <button
+                          key={e}
+                          type="button"
+                          aria-pressed={!emojiLibre && emojiCat === e}
+                          onClick={() => { setEmojiCat(e); setEmojiLibre('') }}
+                          className={`flex h-10 items-center justify-center rounded-xl text-xl transition-all active:scale-90 ${
+                            !emojiLibre && emojiCat === e
+                              ? 'bg-[#EBF7FD] ring-2 ring-[#009DE0]'
+                              : 'bg-[#F6F6F6] hover:bg-slate-200/70'
+                          }`}
+                        >
+                          {e}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        value={emojiLibre}
+                        onChange={(e) => setEmojiLibre(primerGrafema(e.target.value))}
+                        placeholder="O pegá otro emoji"
+                        maxLength={8}
+                        className="h-10 w-36 rounded-xl border border-transparent bg-[#F6F6F6] px-3 text-center text-xl transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#009DE0]/30"
+                      />
+                      <span className="text-xs text-slate-400">Se muestra en catálogo, POS y reportes</span>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
             <Input label="Fecha de vencimiento (opcional)" type="date" value={form.vencimiento} onChange={(e) => setForm({ ...form, vencimiento: e.target.value })} />

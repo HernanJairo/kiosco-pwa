@@ -1,5 +1,5 @@
-import { createElement, useState } from 'react'
-import { iconoCategoria } from '../../utils/icons'
+import { useState } from 'react'
+import IconoCat from './IconoCat'
 import { fotosDe } from '../../utils/imagen'
 
 // Foto principal del producto (fotos[0]) con fallback al ícono de su
@@ -20,7 +20,7 @@ export default function ProductoImg({ producto: p, className = '', iconSize = 18
   }
   return (
     <div className={`flex shrink-0 items-center justify-center bg-gradient-to-br from-brand-soft via-slate-50 to-blue-100/60 text-brand ${className}`}>
-      {createElement(iconoCategoria(p.categoria), { size: iconSize, strokeWidth: 2 })}
+      <IconoCat categoria={p.categoria} size={iconSize} strokeWidth={2} />
     </div>
   )
 }

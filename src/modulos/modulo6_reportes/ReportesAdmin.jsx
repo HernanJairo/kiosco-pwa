@@ -1,4 +1,4 @@
-import { createElement, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ArrowDownToLine, ArrowRight, ArrowUpRight, BadgeAlert, BarChart3, Boxes,
   CalendarDays, ChartNoAxesCombined, CircleDollarSign, Clock3, CreditCard,
@@ -7,7 +7,7 @@ import {
 import { useKiosco } from '../../context/KioscoContext'
 import { motorRecomendaciones, statsPeriodo } from '../../utils/reportes'
 import { fechaLargaHoy, hoyISO, money } from '../../utils/format'
-import { iconoCategoria } from '../../utils/icons'
+import IconoCat from '../../components/ui/IconoCat'
 import './ReportesAdmin.css'
 
 const PERIODOS = [
@@ -230,7 +230,7 @@ export default function ReportesAdmin() {
               ) : (
                 categorias.map((c) => (
                   <div className="category-legend-row" key={c.name} role="listitem">
-                    <span className="legend-name"><i style={{ backgroundColor: c.color }} />{c.name}</span>
+                    <span className="legend-name"><i style={{ backgroundColor: c.color }} /><IconoCat categoria={c.name} size={13} />{c.name}</span>
                     <strong>{money(c.amount)}</strong>
                     <span>{c.share}%</span>
                   </div>
@@ -286,9 +286,9 @@ export default function ReportesAdmin() {
             {comboTop ? (
               <>
                 <div className="pair-products">
-                  <span>{createElement(iconoCategoria(comboTop.pa.categoria), { size: 14 })}{comboTop.pa.nombre}</span>
+                  <span><IconoCat categoria={comboTop.pa.categoria} size={14} />{comboTop.pa.nombre}</span>
                   <i>+</i>
-                  <span>{createElement(iconoCategoria(comboTop.pb.categoria), { size: 14 })}{comboTop.pb.nombre}</span>
+                  <span><IconoCat categoria={comboTop.pb.categoria} size={14} />{comboTop.pb.nombre}</span>
                 </div>
                 <div className="recommendation-result">
                   <span>Precio sugerido · juntos {comboTop.veces} {comboTop.veces === 1 ? 'vez' : 'veces'}</span>
@@ -312,7 +312,7 @@ export default function ReportesAdmin() {
             {slowTop ? (
               <>
                 <div className="slow-product">
-                  <span className="slow-product-icon">{createElement(iconoCategoria(slowTop.p.categoria), { size: 18 })}</span>
+                  <span className="slow-product-icon"><IconoCat categoria={slowTop.p.categoria} size={18} /></span>
                   <span>
                     <strong>{slowTop.p.nombre}</strong>
                     <small>{slowTop.p.stock} u. en stock · {money(slowTop.inmovilizado)} inmovilizados</small>
@@ -340,7 +340,7 @@ export default function ReportesAdmin() {
             {repoTop ? (
               <>
                 <div className="restock-product">
-                  <span className="restock-icon">{createElement(iconoCategoria(repoTop.p.categoria), { size: 18 })}</span>
+                  <span className="restock-icon"><IconoCat categoria={repoTop.p.categoria} size={18} /></span>
                   <span>
                     <strong>{repoTop.p.nombre}</strong>
                     <small>{repoTop.cant > 0 ? `${repoTop.cant} u. vendidas` : 'Alta prioridad de compra'}</small>
@@ -393,7 +393,7 @@ export default function ReportesAdmin() {
                       <span className={`rank-number${i < 3 ? ` rank-${i + 1}` : ''}`}>{String(i + 1).padStart(2, '0')}</span>
                       <span className="bestseller-product-name">{t.nombre}</span>
                     </td>
-                    <td><span className={`table-category category-text-${i % 5}`}>{t.categoria}</span></td>
+                    <td><span className={`table-category category-text-${i % 5}`}><IconoCat categoria={t.categoria} size={11} /> {t.categoria}</span></td>
                     <td className="units-cell">{t.cant} u.</td>
                     <td className="revenue-cell">{money(t.monto)}</td>
                     <td className="progress-cell"><span className="sales-progress"><i style={{ width: `${(t.cant / topMax) * 100}%` }} /></span></td>

@@ -1,6 +1,6 @@
-import { createElement, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react'
-import { iconoCategoria } from '../../utils/icons'
+import IconoCat from './IconoCat'
 import LightboxGaleria from './LightboxGaleria'
 
 /* Galería del producto dentro del modal de detalle: imagen activa completa
@@ -47,7 +47,7 @@ export default function GaleriaProducto({
   if (n === 0) {
     return (
       <div className={`grid ${altura} w-full place-items-center rounded-2xl ${fondoFallback}`}>
-        {createElement(iconoCategoria(categoria), { size: 52, strokeWidth: 1.6, className: tonoIcono })}
+        <IconoCat categoria={categoria} size={52} strokeWidth={1.6} className={tonoIcono} />
       </div>
     )
   }
