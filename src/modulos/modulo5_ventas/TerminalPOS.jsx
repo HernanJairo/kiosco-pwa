@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronUp, HandCoins, Hourglass, Landmark, Loader2, Minus, PackageCheck, Plus, ScanLine, Search, ShoppingCart, Trash2, Wallet, X } from 'lucide-react'
+import { createElement, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, Banknote, CheckCircle2, ChevronDown, ChevronUp, Grid2X2, HandCoins, Hourglass, Landmark, Loader2, Minus, PackageCheck, Plus, ScanLine, Search, ShoppingCart, Trash2, Wallet, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { incluye, norm } from '../../utils/busqueda'
+import { fotosDe } from '../../utils/imagen'
 import { fmtFechaHora, money } from '../../utils/format'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
 import Modal from '../../components/ui/Modal'
 import AvatarCliente from '../../components/ui/AvatarCliente'
 import ProductoImg from '../../components/ui/ProductoImg'
-import CategoriaTile3D from '../../components/ui/CategoriaTile3D'
+import FotosPill from '../../components/ui/FotosPill'
+import { iconoCategoria } from '../../utils/icons'
 import EscanerCamara from '../../components/ui/EscanerCamara'
 import TicketVenta from './TicketVenta'
 import { limiteFiadoVigente } from '../../context/operaciones'
+import '../modulo1_catalogo_auth/CatalogoPublico.css'
 
 const METODOS = [
   { k: 'efectivo', label: 'Efectivo', icon: Banknote, active: 'border-emerald-400 bg-emerald-50 text-emerald-700' },
@@ -20,6 +23,10 @@ const METODOS = [
   { k: 'fiado', label: 'Cta. Corriente', icon: HandCoins, active: 'border-amber-400 bg-amber-50 text-amber-700' },
 ]
 
+// Tonos pastel del kit v0 (mismos nombres que el catálogo público).
+const TONOS = ['blue', 'yellow', 'pink', 'mint', 'aqua', 'lilac']
+const ILIMITADO = 999 // stock 999 = venta libre sin tope (∞)
+
 // Clave de sessionStorage donde vive el ticket en curso: sobrevive a
 // cambios de pestaña del menú (desmontaje del componente) y se descarta
 // al cerrar la pestaña del navegador.
@@ -27,25 +34,30 @@ const CART_KEY = 'kiosco_cart_temp'
 
 // Buscador de clientes reutilizable: se usa en modo fiado (obligatorio) y
 // en contado cuando el vendedor elige asociar la venta a un cliente.
-function BuscadorCliente({ q, onQ, resultados, onSelect, borde = 'border-slate-200' }) {
+function BuscadorCliente({ q, onQ, resultados, onSelect, borde = 'border-transparent' }) {
   return (
     <>
       <input
         value={q}
         onChange={(e) => onQ(e.target.value)}
         placeholder="Buscar cliente por nombre, DNI o teléfono…"
-        className={`w-full rounded-lg border ${borde} bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-soft`}
+        className={`h-11 w-full rounded-xl border ${borde} bg-[#F6F6F6] px-4 text-base outline-none transition-shadow focus:bg-white focus:ring-2 focus:ring-[#009DE0]/30 sm:text-sm`}
       />
-      <ul className="mt-2 flex max-h-44 flex-col gap-1 overflow-y-auto">
+      <ul className="mt-2 flex max-h-48 flex-col gap-1.5 overflow-y-auto">
         {resultados.map((a) => (
           <li key={a.id}>
             <button
               onClick={() => onSelect(a)}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-white"
+              className="flex w-full items-center gap-3 rounded-xl bg-[#F6F6F6] px-3 py-2.5 text-left transition-all duration-150 hover:bg-[#EBF7FD] active:scale-[0.99]"
             >
-              <AvatarCliente cliente={a} className="h-7 w-7" textoClassName="text-[9px]" />
-              <span className="min-w-0 flex-1 truncate font-medium text-slate-700">{a.nombre} {a.apellido} · DNI {a.dni}</span>
-              <span className="text-[11px] text-slate-400">debe {money(a.deuda)}</span>
+              <AvatarCliente cliente={a} className="h-9 w-9" textoClassName="text-[10px]" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-[#202125]">{a.nombre} {a.apellido}</span>
+                <span className="block text-[11px] text-slate-400">DNI {a.dni}</span>
+              </span>
+              <span className={`shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold ${a.deuda > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                {a.deuda > 0 ? `debe ${money(a.deuda)}` : `saldo ${money(a.saldo || 0)}`}
+              </span>
             </button>
           </li>
         ))}
@@ -106,6 +118,10 @@ export default function TerminalPOS() {
   // Límite de cuenta corriente vigente: el tope propio del cliente si lo
   // tiene cargado; si no, el global del kiosco.
   const limiteFiado = clienteSel ? limiteFiadoVigente(clienteSel, config) : Number(config.limiteFiadoGlobal) || 0
+
+  // Contingencia operativa: con los fiados pausados la Cta. Corriente se
+  // apaga en el modal de cobro (validarVenta también la rechaza).
+  const fiadosPausados = config.fiadosActivos === false
 
   // Persistencia del ticket: cada cambio del carrito se refleja en
   // sessionStorage (el estado inicial ya lo restauró al montar). Se
@@ -350,7 +366,7 @@ export default function TerminalPOS() {
     setClienteSel(cliente)
     setEncargosSel(null)
     // Invitado → contado; cliente registrado → propone fiado (editable).
-    setMetodo(cliente ? 'fiado' : 'efectivo')
+    setMetodo(cliente && !fiadosPausados ? 'fiado' : 'efectivo')
     setQCliente('')
     setScanOpen(false)
     if (omitidos.length) notify(`Sin stock completo: ${omitidos.join(', ')}.`, 'warn')
@@ -474,20 +490,32 @@ export default function TerminalPOS() {
     <>
       <div>
         <p className="mb-2 text-xs font-medium text-slate-500">Método de pago *</p>
-        <div className="grid grid-cols-4 gap-2">
-          {METODOS.map(({ k, label, icon: Icon, active }) => (
-            <button
-              key={k}
-              onClick={() => setMetodo(k)}
-              className={`flex flex-col items-center gap-1 rounded-xl border px-2 py-2.5 text-[11px] font-semibold transition-colors ${
-                metodo === k ? active : 'border-slate-200 text-slate-500 hover:border-slate-300'
-              }`}
-            >
-              <Icon size={18} />
-              {label}
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {METODOS.map(({ k, label, icon: Icon, active }) => {
+            const bloqueado = k === 'fiado' && fiadosPausados
+            return (
+              <button
+                key={k}
+                onClick={() => !bloqueado && setMetodo(k)}
+                disabled={bloqueado}
+                title={bloqueado ? 'Fiados pausados temporalmente' : undefined}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-3.5 text-xs font-bold transition-all duration-150 active:scale-[0.97] sm:text-sm ${
+                  bloqueado
+                    ? 'cursor-not-allowed border-slate-200 text-slate-300 opacity-60'
+                    : metodo === k ? active : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                <Icon size={19} />
+                {label}
+              </button>
+            )
+          })}
         </div>
+        {fiadosPausados && (
+          <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-amber-600">
+            <AlertTriangle size={13} /> Fiados pausados temporalmente
+          </p>
+        )}
       </div>
 
       {/* Cliente: el POS opera por defecto en modo Consumidor Final /
@@ -643,12 +671,12 @@ export default function TerminalPOS() {
       <div className="flex min-w-0 flex-col gap-4 pb-28 xl:pb-0">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar producto o código de barras…"
-              className="w-full rounded-xl border border-transparent bg-[#F6F6F6] py-2.5 pl-9 pr-3 text-sm focus:border-[#009DE0]/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
+              className="w-full rounded-xl border border-transparent bg-[#F6F6F6] py-3 pl-10 pr-3 text-base outline-none transition-shadow focus:bg-white focus:ring-2 focus:ring-[#009DE0]/30 sm:text-sm"
             />
           </div>
           <Button variant="secondary" onClick={() => setScanOpen(true)} className="shrink-0">
@@ -664,42 +692,122 @@ export default function TerminalPOS() {
           </Button>
         </div>
 
-        {/* Fila de categorías 3D pastel (estilo Wolt Groceries) */}
-        <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1" style={{ scrollBehavior: 'smooth' }}>
-          <CategoriaTile3D nombre="Todas" activo={cat === 'Todas'} onClick={() => setCat('Todas')} />
-          {categorias.map((c) => (
-            <CategoriaTile3D key={c} nombre={c} activo={cat === c} onClick={() => setCat(cat === c ? 'Todas' : c)} />
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-          {list.map((p) => {
-            const agotado = p.stock <= 0
-            return (
+        {/* Kit visual del catálogo v0: tarjetas pastel de categoría +
+            grilla de productos con arte por tono (reuso de .catalog-app). */}
+        <div className="catalog-app cat-embed">
+          <div className="category-scroller">
+            <button
+              className={`category-card category-all${cat === 'Todas' ? ' category-active' : ''}`}
+              aria-pressed={cat === 'Todas'}
+              onClick={() => setCat('Todas')}
+            >
+              <span className="category-art" aria-hidden="true">
+                <Grid2X2 size={23} strokeWidth={1.9} />
+              </span>
+              <span>Todas</span>
+            </button>
+            {categorias.map((c, i) => (
               <button
-                key={p.id}
-                onClick={() => agregar(p)}
-                disabled={agotado || !config.abierto}
-                className="group flex flex-col overflow-hidden rounded-3xl bg-white text-left shadow-soft transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-lift active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+                key={c}
+                className={`category-card category-${TONOS[i % TONOS.length]}${cat === c ? ' category-active' : ''}`}
+                aria-pressed={cat === c}
+                onClick={() => setCat(cat === c ? 'Todas' : c)}
               >
-                <div className="relative">
-                  <ProductoImg producto={p} className="h-36 w-full sm:h-44" iconSize={40} />
-                  {enCarrito(p.id) > 0 && (
-                    <Badge tone="brand" className="absolute right-2 top-2 shadow-sm">×{enCarrito(p.id)}</Badge>
-                  )}
-                </div>
-                <div className="flex w-full flex-1 flex-col p-3">
-                  <p className="text-sm font-semibold leading-snug text-slate-800">{p.nombre}</p>
-                  <div className="mt-auto flex items-center justify-between pt-2">
-                    <span className="text-sm font-bold text-brand">{money(p.precio)}</span>
-                    <span className={`text-[11px] ${agotado ? 'text-rose-500' : 'text-slate-400'}`}>
-                      {agotado ? 'Agotado' : `stock ${p.stock}`}
-                    </span>
-                  </div>
-                </div>
+                <span className="category-art" aria-hidden="true">
+                  {createElement(iconoCategoria(c), { size: 23, strokeWidth: 1.9 })}
+                </span>
+                <span>{c}</span>
               </button>
-            )
-          })}
+            ))}
+          </div>
+
+          <section className="products-section">
+            <div className="product-grid">
+              {list.map((p) => {
+                const agotado = p.stock <= 0
+                const disabled = agotado || !config.abierto
+                const tono = TONOS[Math.max(0, categorias.indexOf(p.categoria)) % TONOS.length]
+                const fotos = fotosDe(p)
+                return (
+                  <article className={`product-card${disabled ? ' is-disabled' : ''}`} key={p.id}>
+                    <button
+                      className="product-card-main"
+                      onClick={() => agregar(p)}
+                      disabled={disabled}
+                      aria-label={`${p.nombre}, ${money(p.precio)}. Agregar al ticket`}
+                    >
+                      <div className={`product-art art-${tono}`} aria-hidden="true">
+                        {fotos.length ? (
+                          <img src={fotos[0]} alt="" className="art-photo" loading="lazy" />
+                        ) : (
+                          <>
+                            <span className="art-orbit" />
+                            <span className="art-icon">
+                              {createElement(iconoCategoria(p.categoria), {})}
+                            </span>
+                            <span className="art-shine" />
+                          </>
+                        )}
+                        <FotosPill cantidad={fotos.length} />
+                      </div>
+                      <span className="product-category">
+                        {p.categoria} <span>·</span> unidad
+                      </span>
+                      <strong className="product-name">{p.nombre}</strong>
+                      <span className="product-price">{money(p.precio)}</span>
+                      {agotado ? (
+                        <span className="stock-pill stock-empty">Sin stock</span>
+                      ) : p.stock <= 5 ? (
+                        <span className="stock-pill stock-low">Últimas {p.stock}</span>
+                      ) : p.stock >= ILIMITADO ? (
+                        <span className="stock-pill stock-plenty">∞</span>
+                      ) : (
+                        <span className="stock-pill stock-plenty">{p.stock} u.</span>
+                      )}
+                    </button>
+                    {/* Stepper rápido − / +: visible cuando el producto ya
+                        tiene unidades en el ticket. Hermano del botón de la
+                        tarjeta (no se puede anidar botones); el − resta sin
+                        tocar la tarjeta (stopPropagation). */}
+                    {!disabled &&
+                      (enCarrito(p.id) ? (
+                        <div className="quick-stepper" role="group" aria-label={`Unidades de ${p.nombre} en el ticket`}>
+                          <button
+                            type="button"
+                            className="qs-minus"
+                            aria-label={`Quitar una unidad de ${p.nombre}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCantidad(p.id, enCarrito(p.id) - 1)
+                            }}
+                          >
+                            <Minus size={15} />
+                          </button>
+                          <span className="qs-count" aria-live="polite">
+                            {enCarrito(p.id)}
+                          </span>
+                          <button
+                            type="button"
+                            className="qs-plus"
+                            aria-label={`Agregar ${p.nombre} al ticket`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              agregar(p)
+                            }}
+                          >
+                            <Plus size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="add-button" aria-hidden="true">
+                          <Plus size={19} />
+                        </span>
+                      ))}
+                  </article>
+                )
+              })}
+            </div>
+          </section>
         </div>
       </div>
 
@@ -762,7 +870,7 @@ export default function TerminalPOS() {
             </div>
           </div>
         )}
-        <div className="rounded-t-3xl bg-white/95 px-3 py-2.5 shadow-[0_-4px_20px_rgba(15,23,42,0.10)] backdrop-blur">
+        <div className="rounded-t-3xl bg-white/95 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 shadow-[0_-4px_20px_rgba(15,23,42,0.10)] backdrop-blur">
           <div className="mx-auto flex max-w-lg items-center gap-2">
             <button
               onClick={() => setSheetOpen((v) => !v)}
@@ -785,8 +893,8 @@ export default function TerminalPOS() {
       {/* Modal de cobro: paso obligatorio entre "Cobrar $X" y asentar la
           venta. Resume el ticket, elige método y confirma con Enter;
           cancelar (botón, backdrop o Escape) conserva el carrito. */}
-      <Modal open={cobroOpen} onClose={() => setCobroOpen(false)} title="Confirmar cobro">
-        <div className="flex flex-col gap-4">
+      <Modal open={cobroOpen} onClose={() => setCobroOpen(false)} title="Confirmar cobro" className="sm:max-w-xl" bodyClassName="sm:px-7 sm:py-6">
+        <div className="flex flex-col gap-5">
           <div className="rounded-xl border border-transparent bg-[#F6F6F6] px-4 py-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-slate-500">

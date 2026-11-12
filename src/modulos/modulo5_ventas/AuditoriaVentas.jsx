@@ -13,19 +13,31 @@ const METODO_TONE = { efectivo: 'emerald', transferencia: 'indigo', saldo: 'bran
 const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', saldo: 'Billetera', fiado: 'Cta. Corriente' }
 
 export default function AuditoriaVentas() {
-  const { ventas, anularVenta, notify } = useKiosco()
+  const { ventas, session, personal, anularVenta, notify } = useKiosco()
   const [metodo, setMetodo] = useState('todas')
   const [soloHoy, setSoloHoy] = useState(true)
   const [anulando, setAnulando] = useState(null)
+  const [detalle, setDetalle] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  const list = useMemo(
-    () =>
-      ventas.filter(
-        (v) => (metodo === 'todas' || v.metodo === metodo) && (!soloHoy || esHoy(v.fecha))
-      ),
-    [ventas, metodo, soloHoy]
-  )
+  // Vista por rol: el vendedor ve exclusivamente las ventas de su
+  // sesión (matcheo por nombre completo, usuario o nombre de pila,
+  // cubriendo ventas viejas registradas con otro formato); el admin
+  // conserva la auditoría global de todas las sesiones.
+  const esVendedor = session?.rol === 'vendedor'
+
+  const list = useMemo(() => {
+    const p = esVendedor ? (personal || []).find((x) => x.id === session?.id) : null
+    const alias = esVendedor
+      ? [session?.nombre, p?.usuario, p?.nombre].filter(Boolean)
+      : []
+    return ventas.filter(
+      (v) =>
+        (!esVendedor || alias.includes(v.vendedor)) &&
+        (metodo === 'todas' || v.metodo === metodo) &&
+        (!soloHoy || esHoy(v.fecha))
+    )
+  }, [ventas, metodo, soloHoy, esVendedor, session?.id, session?.nombre, personal])
 
   const totalListado = list
     .filter((v) => !v.anulada && v.estado !== 'en_espera_transferencia')
@@ -49,11 +61,18 @@ export default function AuditoriaVentas() {
       <StatCard
         icon={Receipt}
         tone="brand"
-        label={`Total listado (${list.filter((v) => !v.anulada && v.estado !== 'en_espera_transferencia').length} ventas válidas)`}
+        label={`${esVendedor ? 'Total vendido por vos' : 'Total listado'} (${list.filter((v) => !v.anulada && v.estado !== 'en_espera_transferencia').length} ventas válidas)`}
         value={money(totalListado)}
       />
 
-      <Card title="Auditoría de Ventas" subtitle="Historial de transacciones con opción de anulación">
+      <Card
+        title={esVendedor ? 'Mis Ventas' : 'Auditoría de Ventas'}
+        subtitle={
+          esVendedor
+            ? 'Las operaciones que registraste en tu sesión · tocá una para ver el detalle'
+            : 'Historial de transacciones de todas las sesiones · tocá una para ver el detalle'
+        }
+      >
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {[
             { k: 'todas', label: 'Todos los métodos' },
@@ -84,13 +103,14 @@ export default function AuditoriaVentas() {
         </div>
 
         {list.length === 0 ? (
-          <EmptyState icon={Receipt} title="Sin ventas" sub="No hay transacciones para los filtros elegidos." />
+          <EmptyState icon={Receipt} title="Sin ventas" sub={esVendedor ? 'Todavía no registraste ventas con estos filtros.' : 'No hay transacciones para los filtros elegidos.'} />
         ) : (
           <ul className="flex flex-col gap-2.5">
             {list.map((v) => (
               <li
                 key={v.id}
-                className={`flex flex-col gap-2.5 rounded-2xl px-4 py-3.5 ${
+                onClick={() => setDetalle(v)}
+                className={`flex cursor-pointer flex-col gap-2.5 rounded-2xl px-4 py-3.5 transition-all duration-150 hover:ring-1 hover:ring-[#009DE0]/30 ${
                   v.anulada ? 'bg-[#F6F6F6] opacity-60' : 'bg-white shadow-soft'
                 }`}
               >
@@ -124,7 +144,13 @@ export default function AuditoriaVentas() {
                   <span className={`text-lg font-extrabold tracking-tight ${v.anulada ? 'text-slate-400 line-through' : 'text-[#202125]'}`}>
                     {money(v.total)}
                   </span>
-                  <Button variant="ghost" size="sm" disabled={v.anulada} onClick={() => setAnulando(v)} className="rounded-full text-rose-500 hover:bg-rose-50">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={v.anulada}
+                    onClick={(e) => { e.stopPropagation(); setAnulando(v) }}
+                    className="rounded-full text-rose-500 hover:bg-rose-50"
+                  >
                     <Ban size={14} /> Anular
                   </Button>
                 </div>
@@ -133,6 +159,42 @@ export default function AuditoriaVentas() {
           </ul>
         )}
       </Card>
+
+      {/* Detalle completo de la venta al tocar la tarjeta */}
+      <Modal open={!!detalle} onClose={() => setDetalle(null)} title={detalle ? `Venta #${detalle.id.slice(0, 8).toUpperCase()}` : ''}>
+        {detalle && (
+          <div className="flex flex-col gap-4">
+            <p className="text-xs font-medium text-slate-400">
+              {fmtFechaHora(detalle.fecha)} · Atendió {detalle.vendedor}
+            </p>
+            <ul className="flex flex-col divide-y divide-slate-100 rounded-2xl bg-[#F6F6F6] px-4">
+              {detalle.items.map((it, i) => (
+                <li key={i} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="min-w-0 truncate text-slate-700">{it.cantidad}× {it.nombre}</span>
+                  <span className="shrink-0 font-semibold text-[#202125]">{money(it.precio * it.cantidad)}</span>
+                </li>
+              ))}
+              <li className="flex items-center justify-between gap-3 py-2.5 text-sm font-extrabold">
+                <span className="text-slate-500">Total</span>
+                <span className="text-[#009DE0]">{money(detalle.total)}</span>
+              </li>
+            </ul>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              <Badge tone={METODO_TONE[detalle.metodo]}>{METODO_LABEL[detalle.metodo]}</Badge>
+              {detalle.anulada && <Badge tone="slate">Anulada</Badge>}
+              {!detalle.anulada && detalle.estado === 'en_espera_transferencia' && (
+                <Badge tone="amber">En espera</Badge>
+              )}
+            </div>
+            <p className="text-sm text-slate-600">
+              Cliente: <b className="text-[#202125]">{detalle.clienteNombre || 'Consumidor final'}</b>
+            </p>
+            {detalle.retiradoPor && (
+              <p className="text-sm text-slate-600">Retiró: <b className="text-[#202125]">{detalle.retiradoPor}</b></p>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal open={!!anulando} onClose={() => setAnulando(null)} title="Anular venta">
         {anulando && (

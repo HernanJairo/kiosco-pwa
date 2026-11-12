@@ -9,12 +9,12 @@ import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
 
 function FilaStock({ p }) {
-  const { updateProducto, notify } = useKiosco()
+  const { updateProducto, ajustarStock, notify } = useKiosco()
   const [precio, setPrecio] = useState(String(p.precio))
 
   const mover = async (delta) => {
     const nuevo = Math.max(0, p.stock + delta)
-    await updateProducto(p.id, { stock: nuevo })
+    await ajustarStock(p.id, nuevo)
   }
 
   const guardarPrecio = async () => {

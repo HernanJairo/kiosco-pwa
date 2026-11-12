@@ -1,40 +1,35 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, CheckCircle2, KeyRound, Loader2, MessageCircle, SearchX, ShieldCheck, ShoppingBag, Smartphone, Store, UserPlus, Wallet, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Eye, EyeOff, IdCard, Info, KeyRound, Loader2, LockKeyhole, MapPin, MessageCircle, Phone, QrCode, SearchX, ShieldCheck, Smartphone, Sparkles, Store, User, UserPlus, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { clientePorIdentificador } from '../../utils/acceso'
 import { textoResetPin, waLink } from '../../utils/whatsapp'
-import Button from '../../components/ui/Button'
-import Input from '../../components/ui/Input'
-import PhoneInput from '../../components/ui/PhoneInput'
-import Modal from '../../components/ui/Modal'
-import CategoriaTile3D from '../../components/ui/CategoriaTile3D'
-import SwitchEstado from '../../components/ui/SwitchEstado'
-import Logo from '../../assets/logo'
+import './LoginPanel.css'
 
-// Portada de acceso estilo Wolt Onboarding: luminosa, sin bordes duros
-// y con un mosaico de categorías 3D pastel junto a la marca.
-// En md+ se divide en dos columnas — izquierda: mosaico visual + estado
-// del comercio con switch animado; derecha: acceso directo.
+// Pantalla de acceso full-bleed (diseño v0): el shell es un overlay fijo
+// que cubre el header redundante del landing. Panel de bienvenida con
+// mosaico fotográfico + formulario unico con selector Cliente/Personal.
+// Estilos encapsulados en LoginPanel.css (.login-shell).
 export default function LoginPanel() {
-  const { loginCliente, loginStaff, clientes, config, notify, productos } = useKiosco()
+  const { loginCliente, loginStaff, config, notify } = useKiosco()
   const [modo, setModo] = useState('cliente') // 'cliente' | 'staff'
   const [ident, setIdent] = useState('')
   const [pin, setPin] = useState('')
-  const [usuario, setUsuario] = useState('')
-  const [pinStaff, setPinStaff] = useState('')
+  const [verPin, setVerPin] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [recOpen, setRecOpen] = useState(false)
   const [regOpen, setRegOpen] = useState(false)
+  const [contactoOpen, setContactoOpen] = useState(false)
+  const [imgOk, setImgOk] = useState(true)
 
-  const categorias = [...new Set((productos || []).map((p) => p.categoria))].slice(0, 8)
+  const esStaff = modo === 'staff'
 
   const submit = async (e) => {
     e.preventDefault()
     setError('')
     setBusy(true)
     try {
-      const s = modo === 'staff' ? await loginStaff(usuario, pinStaff) : await loginCliente(ident, pin)
+      const s = esStaff ? await loginStaff(ident.trim(), pin) : await loginCliente(ident.trim(), pin)
       notify(`Bienvenido/a, ${s.nombre}`)
     } catch (err) {
       setError(err.message)
@@ -43,306 +38,435 @@ export default function LoginPanel() {
     }
   }
 
+  const demo = async (kind) => {
+    setError('')
+    setBusy(true)
+    try {
+      const s =
+        kind === 'cliente'
+          ? await loginCliente('45111222', '1234')
+          : await loginStaff(kind === 'admin' ? 'admin' : 'vendedor', '1234')
+      notify(`Bienvenido/a, ${s.nombre}`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // "Ver Catálogo": el LandingHeader (oculto tras el overlay) ya expone
+  // esa acción; disparamos su botón real para no duplicar navegación.
+  const irCatalogo = () => {
+    const btn = [...document.querySelectorAll('header button')].find((b) =>
+      b.textContent.includes('Catálogo')
+    )
+    btn?.click()
+  }
+
+  const cambiarModo = (m) => {
+    setModo(m)
+    setError('')
+    setPin('')
+  }
+
   return (
-    <div className="flex w-full flex-col gap-4">
-      <BannerInstalacion />
-
-      <div className="grid w-full overflow-hidden rounded-3xl bg-white shadow-soft md:grid-cols-[1.05fr_1fr]">
-        {/* Columna identidad: mosaico 3D + marca + switch animado (md+) */}
-        <div className="relative hidden flex-col justify-between gap-8 overflow-hidden bg-[#F6F6F6] p-9 md:flex">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-[#009DE0]/10 blur-3xl"
-          />
-          <div className="relative">
-            <div className="flex items-center gap-3">
-              <Logo className="h-12 w-12 drop-shadow" />
-              <div>
-                <p className="text-2xl font-extrabold tracking-tight text-[#202125]">Yapa</p>
-                <p className="text-xs font-medium text-slate-500">La billetera de tu kiosco</p>
-              </div>
+    <div className="login-shell">
+      {/* Panel de bienvenida (desktop) / cabecera con mosaico (mobile) */}
+      <div className="welcome-panel">
+        <div className="mosaic">
+          <div className="mosaic-glow" />
+          {imgOk ? (
+            <img
+              src="/yapa-snacks.png"
+              alt="Productos del kiosco"
+              className="snack-art"
+              onError={() => setImgOk(false)}
+            />
+          ) : (
+            <div className="snack-art grid place-items-center text-[#009DE0]">
+              <Store size={72} strokeWidth={1.2} />
             </div>
-            <h2 className="mt-6 text-3xl font-extrabold leading-tight tracking-tight text-[#202125]">
-              {config.nombreKiosco}
-            </h2>
-            <div className="mt-3 flex items-center gap-3">
-              <SwitchEstado abierto={config.abierto} />
-              <span className="text-sm font-medium text-slate-500">{config.horario}</span>
-            </div>
-          </div>
-
-          {/* Mosaico dinámico de categorías 3D (contenido: padding absorbe
-              los offsets de los tiles y nunca desborda su caja) */}
-          <div className="relative -mx-1 overflow-hidden px-1 pb-4 pt-1">
-            <div className="grid grid-cols-4 gap-3">
-              {(categorias.length ? categorias : ['Bebidas', 'Snacks', 'Almuerzos', 'Golosinas']).slice(0, 4).map((c, i) => (
-                <CategoriaTile3D
-                  key={c}
-                  nombre={c}
-                  decorativo
-                  conEtiqueta={false}
-                  size="md"
-                  className={`items-center ${i % 2 ? 'translate-y-3' : ''}`}
-                />
-              ))}
-            </div>
-          </div>
-
-          <ul className="relative flex flex-col gap-3.5 text-sm">
-            {[
-              { icon: Wallet, t: 'Tu plata, siempre a mano', s: 'Recargá saldo, mirá tus fiados y pagá sin efectivo.' },
-              { icon: ShoppingBag, t: 'Comprás más rápido', s: 'Catálogo en vivo, pedidos por QR y cuenta corriente.' },
-              { icon: Store, t: 'El comercio vende mejor', s: 'Cobranzas ordenadas, stock al día y clientes fieles.' },
-            ].map(({ icon: Icon, t, s }) => (
-              <li key={t} className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#009DE0] shadow-soft">
-                  <Icon size={17} strokeWidth={2} />
-                </span>
-                <span>
-                  <b className="block text-[#202125]">{t}</b>
-                  <span className="text-slate-500">{s}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          )}
+          <p className="mosaic-topline">
+            <span>Tu kiosco de siempre,</span>
+            <span>ahora más rápido.</span>
+          </p>
+          <span className="floating-tag tag-a">
+            <i className="tag-dot" /> Retiro express en caja
+          </span>
+          <span className="floating-tag tag-b">
+            <QrCode size={14} /> Pedidos por QR
+          </span>
         </div>
 
-        {/* Columna acceso: tarjeta única y directa */}
-        <div className="flex flex-col justify-center p-6 sm:p-8">
-          {/* Header compacto de marca para pantallas chicas */}
-          <div className="mb-5 md:hidden">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <Logo className="h-10 w-10 shrink-0" />
-                <div className="min-w-0">
-                  <p className="truncate font-extrabold tracking-tight text-[#202125]">
-                    Yapa · <span className="text-[#009DE0]">{config.nombreKiosco}</span>
-                  </p>
-                  <p className="text-[11px] text-slate-400">{config.horario}</p>
-                </div>
-              </div>
-              <SwitchEstado abierto={config.abierto} conEtiqueta={false} />
+        <div className="store-card">
+          <span className="store-icon">
+            <Store size={20} />
+          </span>
+          <div className="store-details">
+            <span className="eyebrow">TU KIOSCO</span>
+            <strong>{config.nombreKiosco}</strong>
+            <span className="store-caption">{config.direccion || config.horario}</span>
+          </div>
+          <span className={`status-pill${config.abierto ? '' : ' closed'}`}>
+            <i />
+            {config.abierto ? 'Abierto' : 'Cerrado'}
+          </span>
+        </div>
+
+        <div className="welcome-note">
+          <span className="note-star">
+            <Sparkles size={18} />
+          </span>
+          <p>
+            <strong>Bienvenido a Yapa:</strong> tu billetera del kiosco para comprar,
+            fiar y retirar pedidos sin vueltas.
+          </p>
+        </div>
+
+        <span className="panel-footnote">YAPA · TU KIOSCO INTELIGENTE</span>
+      </div>
+
+      {/* Panel de formulario */}
+      <div className="form-panel">
+        <div className="form-content">
+          <div className="form-header">
+            <div className="brand">
+              <span className="brand-mark">
+                <span>Y</span>
+              </span>
+              Yapa
             </div>
-            {/* Tira de categorías 3D tipo onboarding */}
-            <div className="-mx-6 mt-4 flex gap-2.5 overflow-x-auto px-6 pb-1">
-              {(categorias.length ? categorias : ['Bebidas', 'Snacks', 'Almuerzos', 'Golosinas']).map((c) => (
-                <CategoriaTile3D key={c} nombre={c} decorativo size="sm" />
-              ))}
+            <div className="top-actions">
+              <button type="button" className="top-info" onClick={() => setContactoOpen(true)}>
+                <Info size={14} /> Contacto / Info
+              </button>
+              <button type="button" className="top-catalog" onClick={irCatalogo}>
+                <Store size={14} /> Ver Catálogo
+              </button>
             </div>
           </div>
 
-          <h1 className="text-xl font-extrabold tracking-tight text-[#202125] sm:text-2xl">
-            ¡Hola! Ingresá a tu cuenta
-          </h1>
-          <p className="mb-5 mt-1 text-sm text-slate-500">
-            {modo === 'staff' ? 'Acceso para vendedores y administración.' : 'Tu saldo, tus fiados y tus compras, en un solo lugar.'}
-          </p>
+          <div className="mobile-store">
+            <Store size={14} />
+            {config.nombreKiosco}
+            <span className={`mobile-status${config.abierto ? '' : ' closed'}`}>
+              <i />
+              {config.abierto ? 'Abierto' : 'Cerrado'}
+            </span>
+          </div>
 
-          {modo === 'staff' ? (
-            <form onSubmit={submit} className="fade-in flex flex-col gap-3">
-              <Input
-                label="Usuario o DNI"
-                value={usuario}
-                onChange={(e) => setUsuario(e.target.value)}
-                placeholder="usuario"
-                autoComplete="username"
-                autoFocus
-                required
-              />
-              <Input
-                label="PIN (4 dígitos)"
-                inputMode="numeric"
-                maxLength={4}
-                type="password"
-                value={pinStaff}
-                onChange={(e) => setPinStaff(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder="••••"
-                autoComplete="current-password"
-                required
-              />
-              <div className="flex gap-2">
-                <Button type="button" variant="secondary" size="sm" className="flex-1" onClick={() => { setUsuario('admin'); setPinStaff('1234'); setError('') }}>
-                  Demo · admin
-                </Button>
-                <Button type="button" variant="secondary" size="sm" className="flex-1" onClick={() => { setUsuario('vendedor'); setPinStaff('1234'); setError('') }}>
-                  Demo · vendedor
-                </Button>
-              </div>
-              {error && (
-                <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200">
-                  {error}
-                </p>
-              )}
-              <Button type="submit" size="lg" disabled={busy} className="mt-1 w-full">
-                {busy && <Loader2 size={17} className="animate-spin" />}
-                {busy ? 'Ingresando…' : 'Ingresar al mostrador'}
-              </Button>
-              <button
-                type="button"
-                onClick={() => { setModo('cliente'); setError('') }}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-brand"
-              >
-                <ArrowLeft size={13} /> Volver al ingreso de clientes
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={submit} className="fade-in flex flex-col gap-3">
-              <Input
-                label="DNI o Correo"
+          <BannerInstalacion />
+
+          <div className="heading-block">
+            <p className="eyebrow">{esStaff ? 'ACCESO INTERNO' : 'BILLETERA VIRTUAL'}</p>
+            <h1>
+              ¡Hola!<br className="desktop-break" /> Ingresá a tu cuenta
+            </h1>
+            <p className="subtitle">
+              {esStaff
+                ? 'Acceso de vendedores y administración al mostrador.'
+                : 'Tu saldo, tus fiados y tus compras, en un solo lugar.'}
+            </p>
+          </div>
+
+          <div className="seg-control" role="tablist" aria-label="Tipo de acceso">
+            <span className={`seg-thumb${esStaff ? ' right' : ''}`} />
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!esStaff}
+              className={`seg-option${esStaff ? '' : ' active'}`}
+              onClick={() => cambiarModo('cliente')}
+            >
+              <User size={14} /> Soy Cliente
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={esStaff}
+              className={`seg-option${esStaff ? ' active' : ''}`}
+              onClick={() => cambiarModo('staff')}
+            >
+              <ShieldCheck size={14} /> Mostrador / Personal
+            </button>
+          </div>
+
+          <form className="login-form" onSubmit={submit}>
+            <label className="field-label" htmlFor="login-ident">
+              {esStaff ? 'Usuario o DNI del personal' : 'DNI o correo'}
+            </label>
+            <div className="input-wrap">
+              {esStaff ? <ShieldCheck size={17} /> : <IdCard size={17} />}
+              <input
+                id="login-ident"
                 value={ident}
                 onChange={(e) => setIdent(e.target.value)}
-                placeholder="Ej: 45111222 o tu@correo.com"
+                placeholder={esStaff ? 'usuario' : 'Ej: 45111222 o tu@correo.com'}
                 autoComplete="username"
                 autoFocus
                 required
               />
-              <Input
-                label="PIN (4 dígitos)"
+            </div>
+
+            <div className="pin-label">
+              <label className="field-label" htmlFor="login-pin">
+                PIN
+              </label>
+              <span>4 dígitos</span>
+            </div>
+            <div className="input-wrap">
+              <LockKeyhole size={17} />
+              <input
+                id="login-pin"
+                type={verPin ? 'text' : 'password'}
                 inputMode="numeric"
                 maxLength={4}
-                type="password"
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                 placeholder="••••"
                 autoComplete="current-password"
                 required
               />
-
-              {error && (
-                <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200">
-                  {error}
-                </p>
-              )}
-
-              <Button type="submit" size="lg" disabled={busy} className="mt-1 w-full">
-                {busy && <Loader2 size={17} className="animate-spin" />}
-                {busy ? 'Ingresando…' : 'Ingresar'}
-              </Button>
-
               <button
                 type="button"
-                onClick={() => setRecOpen(true)}
-                className="inline-flex items-center justify-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-brand"
+                className="reveal-button"
+                onClick={() => setVerPin((v) => !v)}
+                aria-label={verPin ? 'Ocultar PIN' : 'Mostrar PIN'}
               >
-                <KeyRound size={13} /> ¿Olvidaste tu PIN?
+                {verPin ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
+            </div>
 
-              <div className="flex items-center gap-3 py-1" role="separator">
-                <span className="h-px flex-1 bg-slate-200" />
-                <span className="text-[11px] font-medium uppercase tracking-wide text-slate-300">o</span>
-                <span className="h-px flex-1 bg-slate-200" />
-              </div>
+            {!esStaff ? (
+              <button type="button" className="forgot-link" onClick={() => setRecOpen(true)}>
+                ¿Olvidaste tu PIN?
+              </button>
+            ) : (
+              <div className="forgot-link" aria-hidden="true" style={{ pointerEvents: 'none' }} />
+            )}
 
-              <Button
-                type="button"
-                size="lg"
-                variant="secondary"
-                onClick={() => setRegOpen(true)}
-                className="w-full"
-              >
-                <UserPlus size={17} /> Crear cuenta nueva
-              </Button>
-            </form>
-          )}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
 
-          {/* Acceso discreto del personal */}
-          {modo === 'cliente' && (
-            <button
-              type="button"
-              onClick={() => { setModo('staff'); setError('') }}
-              className="mt-6 inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-slate-400 transition-colors hover:text-slate-600"
-            >
-              <ShieldCheck size={12} /> ¿Sos vendedor o administrador? Ingresá al panel de personal
+            <button type="submit" className="primary-button login-button" disabled={busy}>
+              {busy ? 'Ingresando…' : 'Ingresar'}
+              {busy ? <Loader2 className="animate-spin" /> : <ArrowRight />}
             </button>
+          </form>
+
+          {!esStaff && (
+            <>
+              <div className="divider">o</div>
+              <button type="button" className="secondary-button" onClick={() => setRegOpen(true)}>
+                <UserPlus size={17} /> Crear cuenta nueva
+              </button>
+            </>
           )}
+
+          <div className="demo-section">
+            <p className="demo-label">Acceso rápido de demostración</p>
+            <div className="demo-grid">
+              <button type="button" className="demo-btn" onClick={() => demo('cliente')} disabled={busy}>
+                <User size={15} />
+                Demo Cliente
+                <small>DNI 45111222</small>
+              </button>
+              <button type="button" className="demo-btn" onClick={() => demo('vendedor')} disabled={busy}>
+                <Store size={15} />
+                Demo Vendedor
+                <small>vendedor</small>
+              </button>
+              <button type="button" className="demo-btn" onClick={() => demo('admin')} disabled={busy}>
+                <ShieldCheck size={15} />
+                Demo Admin
+                <small>admin</small>
+              </button>
+            </div>
+          </div>
+
+          <p className="legal-note">
+            Al ingresar aceptás las condiciones de uso de Yapa.
+            <br />
+            Tu cuenta y tu saldo están protegidos por tu PIN de 4 dígitos.
+          </p>
         </div>
       </div>
 
-      <Modal open={regOpen} onClose={() => setRegOpen(false)} title="Crear cuenta nueva">
-        {regOpen && <FormRegistro onCreada={() => setRegOpen(false)} />}
-      </Modal>
-
-      <Modal open={recOpen} onClose={() => setRecOpen(false)} title="Recuperar acceso">
-        {recOpen && <FormRecupero clientes={clientes} config={config} />}
-      </Modal>
+      {regOpen && <DialogRegistro onClose={() => setRegOpen(false)} onCreada={(dni) => setIdent(dni)} />}
+      {recOpen && <DialogRecupero onClose={() => setRecOpen(false)} />}
+      {contactoOpen && <DialogContacto onClose={() => setContactoOpen(false)} />}
     </div>
   )
 }
 
-// Tarjeta discreta de instalación PWA: invita a fijar la app en el
-// inicio del celular. Si el navegador expone beforeinstallprompt, el
-// botón dispara el flujo nativo; si no, queda solo el aviso con cierre.
+// Banner PWA compacto y SIEMPRE visible (incl. localhost e iOS/Safari):
+// si el navegador capturó beforeinstallprompt dispara el instalador
+// nativo en 1 clic; si no, abre el modal con los pasos por plataforma.
 function BannerInstalacion() {
-  const [visible, setVisible] = useState(() => {
-    try {
-      if (localStorage.getItem('yapa_install_hide')) return false
-      if (window.matchMedia?.('(display-mode: standalone)').matches) return false
-    } catch { /* sin storage: igual se muestra */ }
-    return true
-  })
-  const [prompt, setPrompt] = useState(null)
+  const [promptEvt, setPromptEvt] = useState(null)
+  const [instOpen, setInstOpen] = useState(false)
 
   useEffect(() => {
     const onPrompt = (e) => {
       e.preventDefault()
-      setPrompt(e)
+      setPromptEvt(e)
     }
     window.addEventListener('beforeinstallprompt', onPrompt)
     return () => window.removeEventListener('beforeinstallprompt', onPrompt)
   }, [])
 
-  if (!visible) return null
-
   const instalar = async () => {
-    if (prompt) {
-      prompt.prompt()
-      await prompt.userChoice.catch(() => null)
+    if (promptEvt) {
+      promptEvt.prompt()
+      await promptEvt.userChoice.catch(() => null)
+    } else {
+      setInstOpen(true)
     }
-    setVisible(false)
-    try { localStorage.setItem('yapa_install_hide', '1') } catch { /* noop */ }
-  }
-
-  const cerrar = () => {
-    setVisible(false)
-    try { localStorage.setItem('yapa_install_hide', '1') } catch { /* noop */ }
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-blue-200/70 bg-brand-soft px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-brand shadow-sm ring-1 ring-inset ring-blue-100">
-        <Smartphone size={17} strokeWidth={2} />
-      </span>
-      <p className="min-w-0 flex-1 text-xs font-medium text-brand sm:text-sm">
-        <b className="block sm:inline">Tenela como app, sin descargar nada.</b>{' '}
-        <span className="text-brand/70">Agregala a tu inicio y entrá con un toque.</span>
-      </p>
-      {prompt && (
-        <button
-          onClick={instalar}
-          className="shrink-0 rounded-xl bg-brand px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark"
-        >
-          Instalar
+    <>
+      <div className="pwa-banner">
+        <span className="pwa-icon">
+          <Smartphone size={16} />
+        </span>
+        <p className="pwa-copy">
+          <strong>Tenela como app, sin descargar nada.</strong>
+          Agregala a tu inicio y entrá con un toque.
+        </p>
+        <button type="button" className="pwa-install" onClick={instalar}>
+          Instalar app
         </button>
-      )}
-      <button
-        onClick={cerrar}
-        aria-label="Cerrar aviso de instalación"
-        className="shrink-0 rounded-lg p-1.5 text-brand/50 transition-colors hover:bg-white/70 hover:text-brand"
-      >
-        <X size={15} />
-      </button>
+      </div>
+      {instOpen && <DialogInstalacion onClose={() => setInstOpen(false)} />}
+    </>
+  )
+}
+
+// Capa de diálogo compartida (backdrop + cierre por Escape / click fuera).
+function Dialog({ onClose, icon: Icon, eyebrow, title, copy, children }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      role="presentation"
+    >
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={title}>
+        <button type="button" className="icon-button dialog-close" onClick={onClose} aria-label="Cerrar">
+          <X size={16} />
+        </button>
+        <div className="dialog-icon">
+          <Icon size={20} />
+        </div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+        {copy && <p className="dialog-copy">{copy}</p>}
+        {children}
+      </div>
     </div>
   )
 }
 
-// Auto-registro público: el cliente crea su cuenta con DNI único y su
-// propio PIN de 4 dígitos. Si el DNI ya está registrado, se bloquea.
-function FormRegistro({ onCreada }) {
+// Modal de contacto: info de Yapa + datos reales del kiosco.
+function DialogContacto({ onClose }) {
+  const { config } = useKiosco()
+  return (
+    <Dialog
+      onClose={onClose}
+      icon={Info}
+      eyebrow="YAPA · CONTACTO"
+      title={config.nombreKiosco}
+      copy="La billetera de tu kiosco: saldo, fiados y encargos en un solo lugar."
+    >
+      <div className="form-stack">
+        <span className="contact-row">
+          <MapPin size={16} /> {config.direccion}
+        </span>
+        <span className="contact-row">
+          <Clock3 size={16} /> {config.horario}
+        </span>
+        <span className="contact-row">
+          <Phone size={16} /> {config.contacto}
+        </span>
+        <a
+          className="contact-row"
+          href={waLink(config.whatsapp, `Hola! Consulta para ${config.nombreKiosco}.`)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <MessageCircle size={16} /> Escribinos por WhatsApp
+        </a>
+      </div>
+      <p className="legal-note" style={{ marginTop: 18 }}>
+        Desarrollado por estudiantes de la Tecnicatura Superior en Ciencia de
+        Datos e Inteligencia Artificial · IES N° 6
+      </p>
+      <button type="button" className="back-link" onClick={onClose}>
+        <ArrowLeft size={14} /> Volver al ingreso
+      </button>
+    </Dialog>
+  )
+}
+
+// Instrucciones de instalación por plataforma (iOS / Android / PC).
+function DialogInstalacion({ onClose }) {
+  return (
+    <Dialog
+      onClose={onClose}
+      icon={Smartphone}
+      eyebrow="INSTALAR YAPA"
+      title="Agregala a tu pantalla de inicio"
+      copy="Ocupa poquísimo espacio y funciona como una app nativa."
+    >
+      <ul className="install-steps">
+        <li>
+          <span>
+            <b>iPhone / iPad</b>
+            En Safari tocá <b>Compartir</b> (ícono de compartir) →{' '}
+            <b>“Agregar a pantalla de inicio”</b> → Agregar.
+          </span>
+        </li>
+        <li>
+          <span>
+            <b>Android</b>
+            En Chrome tocá el menú <b>⋮</b> → <b>“Instalar app”</b> o{' '}
+            <b>“Agregar a pantalla principal”</b>.
+          </span>
+        </li>
+        <li>
+          <span>
+            <b>PC / Escritorio</b>
+            Tocá el ícono de instalación en la barra de direcciones del
+            navegador → <b>Instalar</b>.
+          </span>
+        </li>
+      </ul>
+      <button type="button" className="back-link" onClick={onClose}>
+        <ArrowLeft size={14} /> Entendido
+      </button>
+    </Dialog>
+  )
+}
+
+// Auto-registro público: crea la cuenta con DNI único y PIN propio.
+function DialogRegistro({ onClose, onCreada }) {
   const { crearCliente, notify } = useKiosco()
-  const [form, setForm] = useState({ dni: '', nombre: '', apellido: '', telefono: '', email: '', pin: '', pin2: '' })
+  const [form, setForm] = useState({ dni: '', telefono: '', nombre: '', apellido: '', email: '', pin: '', pin2: '' })
+  const [verPin, setVerPin] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const setNum = (k, max) => (e) => setForm((f) => ({ ...f, [k]: e.target.value.replace(/\D/g, '').slice(0, max) }))
 
   const submit = async (e) => {
     e.preventDefault()
@@ -359,7 +483,8 @@ function FormRegistro({ onCreada }) {
         pin: form.pin,
       })
       notify(`Cuenta creada para ${form.nombre}: ya podés ingresar con tu DNI o correo y PIN.`)
-      onCreada()
+      onCreada(form.dni)
+      onClose()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -368,75 +493,109 @@ function FormRegistro({ onCreada }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-3">
-      <Input
-        label="DNI *"
-        inputMode="numeric"
-        placeholder="Solo números · será tu usuario"
-        value={form.dni}
-        onChange={(e) => setForm((f) => ({ ...f, dni: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
-        required
-      />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Nombre *" placeholder="Ej.: Ana" value={form.nombre} onChange={set('nombre')} required />
-        <Input label="Apellido *" placeholder="Ej.: Pérez" value={form.apellido} onChange={set('apellido')} required />
-      </div>
-      <PhoneInput
-        label="Teléfono / WhatsApp"
-        value={form.telefono}
-        onChange={(v) => setForm((f) => ({ ...f, telefono: v }))}
-      />
-      <Input
-        label="Correo electrónico (opcional)"
-        type="email"
-        placeholder="tu@correo.com · podés usarlo para ingresar"
-        value={form.email}
-        onChange={set('email')}
-      />
-      <div className="grid grid-cols-2 gap-3">
-        <Input
-          label="PIN (4 dígitos) *"
-          inputMode="numeric"
-          maxLength={4}
-          type="password"
-          value={form.pin}
-          onChange={(e) => setForm((f) => ({ ...f, pin: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-          placeholder="••••"
-          required
-        />
-        <Input
-          label="Repetir PIN *"
-          inputMode="numeric"
-          maxLength={4}
-          type="password"
-          value={form.pin2}
-          onChange={(e) => setForm((f) => ({ ...f, pin2: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-          placeholder="••••"
-          required
-        />
-      </div>
-      {error && (
-        <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-600 ring-1 ring-inset ring-rose-200">
-          {error}
+    <Dialog
+      onClose={onClose}
+      icon={UserPlus}
+      eyebrow="NUEVA CUENTA"
+      title="Crear cuenta nueva"
+      copy="Registrate con tu DNI y un PIN de 4 dígitos para usar la billetera, fiar y hacer encargos."
+    >
+      <form className="form-stack" onSubmit={submit}>
+        <div className="form-grid">
+          <label className="full-field">
+            DNI
+            <input
+              inputMode="numeric"
+              placeholder="Solo números · será tu usuario"
+              value={form.dni}
+              onChange={setNum('dni', 10)}
+              autoFocus
+              required
+            />
+          </label>
+          <label className="full-field">
+            Teléfono / WhatsApp
+            <input
+              inputMode="tel"
+              placeholder="Ej: 11 5555-5555"
+              value={form.telefono}
+              onChange={set('telefono')}
+            />
+          </label>
+          <label>
+            Nombre
+            <input placeholder="Ej.: Ana" value={form.nombre} onChange={set('nombre')} required />
+          </label>
+          <label>
+            Apellido
+            <input placeholder="Ej.: Pérez" value={form.apellido} onChange={set('apellido')} required />
+          </label>
+          <label className="full-field">
+            Correo electrónico <span className="optional">(opcional)</span>
+            <input
+              type="email"
+              placeholder="tu@correo.com · podés usarlo para ingresar"
+              value={form.email}
+              onChange={set('email')}
+            />
+          </label>
+          <label>
+            PIN
+            <input
+              type={verPin ? 'text' : 'password'}
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="••••"
+              value={form.pin}
+              onChange={setNum('pin', 4)}
+              required
+            />
+          </label>
+          <label>
+            Repetir PIN
+            <input
+              type={verPin ? 'text' : 'password'}
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="••••"
+              value={form.pin2}
+              onChange={setNum('pin2', 4)}
+              required
+            />
+          </label>
+        </div>
+
+        <button type="button" className="show-pin" onClick={() => setVerPin((v) => !v)}>
+          {verPin ? <EyeOff size={14} /> : <Eye size={14} />} {verPin ? 'Ocultar' : 'Mostrar'} PIN
+        </button>
+
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy ? 'Creando cuenta…' : 'Crear mi cuenta'}
+          {busy && <Loader2 className="animate-spin" />}
+        </button>
+
+        <p className="legal-note">
+          Si tu DNI ya está registrado no vas a poder duplicar la cuenta: usá
+          “¿Olvidaste tu PIN?” en la pantalla de ingreso.
         </p>
-      )}
-      <Button type="submit" disabled={busy} className="mt-1 w-full">
-        {busy && <Loader2 size={16} className="animate-spin" />}
-        {busy ? 'Creando cuenta…' : 'Crear mi cuenta'}
-      </Button>
-      <p className="text-[11px] text-slate-400">
-        Si tu DNI ya está registrado, el sistema no te va a dejar duplicar la cuenta: usá
-        "¿Olvidaste tu PIN?" en la pantalla de ingreso.
-      </p>
-    </form>
+      </form>
+      <button type="button" className="back-link" onClick={onClose}>
+        <ArrowLeft size={14} /> Volver al ingreso
+      </button>
+    </Dialog>
   )
 }
 
-// Recuperación asistida: el usuario ingresa su DNI o correo; si coincide
-// con una cuenta se registra una solicitud RESET_PIN para el mostrador y
-// se arma el mensaje de auxilio por WhatsApp al número del kiosco.
-function FormRecupero({ clientes, config }) {
-  const { solicitarResetPin } = useKiosco()
+// Recupero de PIN: busca la cuenta por DNI o correo, registra la
+// solicitud RESET_PIN en el mostrador y ofrece el WhatsApp oficial.
+function DialogRecupero({ onClose }) {
+  const { solicitarResetPin, clientes, config } = useKiosco()
   const [ident, setIdent] = useState('')
   const [resultado, setResultado] = useState(undefined) // undefined | null | cliente
   const [busy, setBusy] = useState(false)
@@ -457,62 +616,59 @@ function FormRecupero({ clientes, config }) {
   }
 
   const nombre = resultado ? `${resultado.nombre} ${resultado.apellido}` : ''
-  const url =
-    resultado && waLink(config.whatsapp, textoResetPin({ nombre, identificador: resultado.dni }))
+  const url = resultado && waLink(config.whatsapp, textoResetPin({ nombre, identificador: resultado.dni }))
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-sm text-slate-600">
-        Ingresá tu <b>DNI o correo</b>. Si coincide con una cuenta registrada, dejamos un pedido de
-        restablecimiento en la bandeja del kiosco y te derivamos al WhatsApp oficial.
-      </p>
-      <form onSubmit={buscar} className="flex gap-2">
-        <div className="min-w-0 flex-1">
-          <Input
+    <Dialog
+      onClose={onClose}
+      icon={KeyRound}
+      eyebrow="RECUPERO DE ACCESO"
+      title="¿Olvidaste tu PIN?"
+      copy="Ingresá tu DNI o correo. Si coincide con una cuenta, dejamos el pedido de restablecimiento en la bandeja del kiosco."
+    >
+      <form className="form-stack" onSubmit={buscar}>
+        <label>
+          DNI o correo
+          <input
             value={ident}
-            onChange={(e) => { setIdent(e.target.value); setResultado(undefined) }}
+            onChange={(e) => {
+              setIdent(e.target.value)
+              setResultado(undefined)
+            }}
             placeholder="Ej: 45111222 o tu@correo.com"
             autoFocus
             required
           />
-        </div>
-        <Button type="submit" variant="secondary" disabled={busy}>
-          {busy ? 'Buscando…' : 'Buscar'}
-        </Button>
+        </label>
+        <button type="submit" className="primary-button" disabled={busy}>
+          {busy ? 'Buscando…' : 'Buscar mi cuenta'}
+          {busy && <Loader2 className="animate-spin" />}
+        </button>
       </form>
 
       {resultado === null && (
-        <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
-          <SearchX size={15} className="mt-0.5 shrink-0" />
-          No encontramos ninguna cuenta con ese dato. Revisalo, creá tu cuenta con
-          "Crear mi cuenta" o consultá en el mostrador.
+        <p className="form-error" role="alert">
+          <SearchX size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+          No encontramos ninguna cuenta con ese dato. Revisalo o consultá en el mostrador.
         </p>
       )}
 
       {resultado && (
-        <div className="flex flex-col gap-3">
-          <p className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
-            <span>
-              Cuenta encontrada: <b>{nombre}</b> · DNI <b>{resultado.dni}</b>
-              <br />
-              <span className="text-xs">Tu pedido de restablecimiento ya quedó registrado en el kiosco.</span>
-            </span>
+        <>
+          <p className="form-notice">
+            <CheckCircle2 size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />
+            Cuenta encontrada: <b>{nombre}</b> · DNI <b>{resultado.dni}</b>. Tu pedido de
+            restablecimiento ya quedó registrado en el kiosco.
           </p>
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 py-2.5 text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark"
-          >
-            <MessageCircle size={17} /> Enviar pedido de auxilio por WhatsApp
+          <a href={url} target="_blank" rel="noopener noreferrer" className="primary-button whatsapp-link">
+            <MessageCircle size={16} /> Enviar pedido por WhatsApp
           </a>
-          <p className="text-[11px] text-slate-400">
-            Se abre WhatsApp ({config.whatsapp}) con el pedido ya redactado. El kiosco verifica tu
-            identidad antes de asignar un PIN nuevo.
-          </p>
-        </div>
+        </>
       )}
-    </div>
+
+      <button type="button" className="back-link" onClick={onClose}>
+        <ArrowLeft size={14} /> Volver al ingreso
+      </button>
+    </Dialog>
   )
 }

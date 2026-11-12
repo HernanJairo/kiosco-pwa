@@ -8,6 +8,7 @@ import Input, { Select } from '../../components/ui/Input'
 import Modal from '../../components/ui/Modal'
 import AvatarPersonal from '../../components/ui/AvatarPersonal'
 import SwitchEstado from '../../components/ui/SwitchEstado'
+import EstadoServicio from '../../components/ui/EstadoServicio'
 
 const VACIO_PERSONAL = { nombre: '', apellido: '', usuario: '', rol: 'vendedor', pin: '', puesto: '' }
 
@@ -171,7 +172,7 @@ export default function ConfiguracionKiosco() {
               ? 'Productos, clientes y ventas se espejan en la nube.'
               : persistencia.useFirebase
                 ? 'Firebase habilitado pero sin respuesta: se usan datos locales.'
-                : 'Persistencia en este dispositivo. Para conectar Firebase: npm i firebase, completar src/firebase/firebaseConfig.js y activar USE_FIREBASE.'}
+                : 'Persistencia en este dispositivo. Configurá las variables VITE_FIREBASE_* y conexión a internet para sincronizar con Firestore.'}
           </p>
         </div>
       </div>
@@ -194,6 +195,41 @@ export default function ConfiguracionKiosco() {
             onChange={(e) => setForm({ ...form, limiteFiadoGlobal: Number(e.target.value) || 0 })}
             required
           />
+          {/* Regla antifraude: desbloqueo automático de la Cuenta
+              Corriente cuando el cliente cumple AMBOS requisitos. */}
+          <div className="sm:col-span-2 rounded-xl bg-[#EBF7FD] px-4 py-3">
+            <p className="text-xs font-bold text-[#007AB8]">Desbloqueo automático de Cuenta Corriente</p>
+            <p className="mt-0.5 text-[11px] text-[#555963]">
+              El cliente habilita el fiado cuando junta ambas cosas: la cantidad de compras y el
+              monto acumulado. Los clientes nuevos arrancan solo con saldo prepago.
+            </p>
+            <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <Input
+                label="Compras mínimas"
+                type="number"
+                min="1"
+                value={form.comprasMinimasParaFiado ?? 10}
+                onChange={(e) => setForm({ ...form, comprasMinimasParaFiado: Math.max(1, Number(e.target.value) || 1) })}
+                required
+              />
+              <Input
+                label="Monto acumulado mínimo ($)"
+                type="number"
+                min="0"
+                value={form.montoMinimoParaFiado ?? 20000}
+                onChange={(e) => setForm({ ...form, montoMinimoParaFiado: Math.max(0, Number(e.target.value) || 0) })}
+                required
+              />
+              <Input
+                label="Límite inicial al desbloquear ($)"
+                type="number"
+                min="0"
+                value={form.limiteFiadoInicialDesbloqueado ?? 10000}
+                onChange={(e) => setForm({ ...form, limiteFiadoInicialDesbloqueado: Math.max(0, Number(e.target.value) || 0) })}
+                required
+              />
+            </div>
+          </div>
           <div className="sm:col-span-2">
             <Button type="submit" disabled={busy}>
               <Save size={15} /> {busy ? 'Guardando…' : 'Guardar cambios'}
@@ -292,6 +328,10 @@ export default function ConfiguracionKiosco() {
           </div>
           <SwitchEstado abierto={config.abierto} onToggle={toggleAbierto} />
         </div>
+      </Card>
+
+      <Card title="Control Operativo" subtitle="Pausá o reactivá servicios sin cerrar el local">
+        <EstadoServicio />
       </Card>
 
       <Card title="Zona de peligro" subtitle="Acciones sobre los datos de demostración">

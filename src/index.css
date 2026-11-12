@@ -11,6 +11,16 @@ body {
   @apply bg-slate-50 text-slate-800 antialiased;
 }
 
+/* iOS Safari hace zoom automático al enfocar inputs con font-size < 16px.
+   En móvil forzamos 16px en todos los campos de texto para evitarlo. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

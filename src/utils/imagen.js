@@ -26,3 +26,18 @@ export function archivoADataURL(file, { max = 480, calidad = 0.78 } = {}) {
     reader.readAsDataURL(file)
   })
 }
+
+// Lista normalizada de fotos del producto: prioriza `fotos[]` y cae al
+// `foto` único de los productos antiguos (retrocompatibilidad total).
+export const fotosDe = (p) => {
+  if (Array.isArray(p?.fotos) && p.fotos.some(Boolean)) return p.fotos.filter(Boolean)
+  return p?.foto ? [p.foto] : []
+}
+
+// Garantiza la forma nueva del registro: `fotos[]` siempre presente y
+// `foto` apuntando a la principal (fotos[0]) para que el código viejo
+// siga funcionando sin cambios.
+export const normalizarFotos = (p) => {
+  const fotos = fotosDe(p)
+  return { ...p, fotos, foto: fotos[0] || null }
+}

@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 
 .vercel
+
+# Variables de entorno (Firebase config va embebida con fallback)
+.env
+.env.*
+!.env.example

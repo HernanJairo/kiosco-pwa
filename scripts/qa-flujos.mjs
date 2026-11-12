@@ -15,6 +15,7 @@ import {
   cambiarPinPersonalDb,
   cancelarEncargoDb,
   descartarSolicitudDb,
+  desbloquearFiadoDb,
   eliminarClienteDb,
   eliminarPersonalDb,
   encargosActivosDe,
@@ -24,6 +25,7 @@ import {
   marcarEncargoListoDb,
   nuevaSolicitudResetPin,
   nuevaSolicitudTransferencia,
+  progresoFiado,
   nuevoCliente,
   nuevoEncargo,
   nuevoPersonal,
@@ -119,11 +121,76 @@ console.log('\n═══ 3. Venta fiada: exige cliente e incrementa deuda ══
   ok(c.fiados[0].ventaId === 'v-fiada' && c.fiados[0].pendiente === total, 'fiado asentado en la libreta')
   ok(c.movimientos[0].tipo === 'fiado', 'movimiento registrado')
 
-  // Cliente sin saldo ni límite habilitado
+  // Cliente nuevo (antifraude): nace sin Cuenta Corriente, solo prepago
   db.config.limiteFiadoGlobal = 0
   const sinCredito = nuevoCliente({ nombre: 'Sin', apellido: 'Credito', dni: '55555555', pin: '9999', limiteFiado: 0 })
   db.clientes.push(sinCredito)
-  tira(() => validarVenta(db, { items, metodo: 'fiado', clienteId: sinCredito.id }), 'saldo a favor ni límite', 'cliente sin límite ni saldo rechazado')
+  tira(() => validarVenta(db, { items, metodo: 'fiado', clienteId: sinCredito.id }), 'Cuenta Corriente habilitada', 'cliente nuevo sin fiado habilitado rechazado')
+
+  // Bloqueo manual del admin: aunque tenga saldo, el fiado queda cortado
+  sinCredito.saldo = 500
+  sinCredito.fiadoHabilitado = true
+  sinCredito.fiadoBloqueado = true
+  tira(() => validarVenta(db, { items, metodo: 'fiado', clienteId: sinCredito.id }), 'bloqueada', 'fiado bloqueado por admin rechazado')
+
+  // Legado (base vieja sin flags): sin saldo ni límite, mensaje clásico
+  const legado = nuevoCliente({ nombre: 'Legado', apellido: 'Viejo', dni: '66666666', pin: '1111', limiteFiado: 0 })
+  delete legado.fiadoHabilitado
+  delete legado.fiadoBloqueado
+  legado.saldo = 0
+  db.clientes.push(legado)
+  tira(() => validarVenta(db, { items, metodo: 'fiado', clienteId: legado.id }), 'saldo a favor ni límite', 'cliente legado sin límite ni saldo rechazado')
+}
+
+console.log('\n═══ 3ab. Contingencia operativa: fiados y encargos pausados ═══')
+{
+  const semilla = buildSeed()
+  ok(semilla.config.fiadosActivos === true && semilla.config.encargosActivos === true, 'interruptores de contingencia activos por defecto')
+
+  const db = clonar(buildSeed())
+  db.config.fiadosActivos = false
+  const cli = db.clientes.find((x) => limiteFiadoVigente(x, db.config) > 0)
+  tira(() => validarVenta(db, { items: [{ productoId: db.productos[0].id, cantidad: 1 }], metodo: 'fiado', clienteId: cli.id }), 'pausados', 'fiado rechazado con contingencia activa')
+  db.config.fiadosActivos = true
+  ok(!!validarVenta(db, { items: [{ productoId: db.productos[0].id, cantidad: 1 }], metodo: 'fiado', clienteId: cli.id }), 'fiado vuelve a validar al reactivar')
+
+  db.config.encargosActivos = false
+  tira(() => nuevoEncargo(db, { clienteId: cli.id, items: [{ productoId: db.productos[0].id, cantidad: 1 }] }), 'pausados', 'encargo rechazado con contingencia activa')
+  db.config.encargosActivos = true
+  const enc = nuevoEncargo(db, { clienteId: cli.id, items: [{ productoId: db.productos[0].id, cantidad: 1 }] })
+  ok(!!enc && enc.clienteId === cli.id, 'encargo vuelve a crearse al reactivar')
+}
+
+console.log('\n═══ 3b. Desbloqueo automático del fiado (regla mixta) ═══')
+{
+  const db = clonar(buildSeed())
+  db.config.comprasMinimasParaFiado = 3
+  db.config.montoMinimoParaFiado = 5000
+  db.config.limiteFiadoInicialDesbloqueado = 8000
+  const prod = db.productos[0]
+  const cli = nuevoCliente({ nombre: 'Fiel', apellido: 'Compra', dni: '77777777', pin: '1234', limiteFiado: 0 })
+  db.clientes.push(cli)
+
+  // Dos compras chicas: cantidad ok en progreso, monto todavía bajo
+  for (let i = 0; i < 2; i++) {
+    const { detalle, total } = validarVenta(db, { items: [{ productoId: prod.id, cantidad: 1 }], metodo: 'efectivo', clienteId: cli.id })
+    aplicarVentaDb(db, { venta: { id: `v-des-${i}`, fecha: new Date().toISOString(), items: detalle, total, metodo: 'efectivo', vendedor: 'qa', clienteId: cli.id }, detalle, metodo: 'efectivo', clienteId: cli.id })
+  }
+  const p1 = progresoFiado(db, cli)
+  ok(p1.compras === 2 && desbloquearFiadoDb(db, cli.id) === null, `progreso ${p1.compras}/${p1.minCompras} compras · sin desbloquear aún`)
+
+  // Tercera compra que además supera el monto → desbloqueo exacto una vez
+  const { detalle: d3, total: t3 } = validarVenta(db, { items: [{ productoId: prod.id, cantidad: 8 }], metodo: 'efectivo', clienteId: cli.id })
+  aplicarVentaDb(db, { venta: { id: 'v-des-2', fecha: new Date().toISOString(), items: d3, total: t3, metodo: 'efectivo', vendedor: 'qa', clienteId: cli.id }, detalle: d3, metodo: 'efectivo', clienteId: cli.id })
+  const des = desbloquearFiadoDb(db, cli.id)
+  ok(des && des.limite === 8000 && cli.fiadoHabilitado === true, `desbloqueo aplicado · límite ${des?.limite}`)
+  ok(desbloquearFiadoDb(db, cli.id) === null, 'el desbloqueo no se repite')
+
+  // Cliente bloqueado por admin jamás se auto-desbloquea
+  const bloq = nuevoCliente({ nombre: 'Bloq', apellido: 'Ueado', dni: '88888888', pin: '1234', limiteFiado: 0 })
+  bloq.fiadoBloqueado = true
+  db.clientes.push(bloq)
+  ok(desbloquearFiadoDb(db, bloq.id) === null, 'bloqueado por admin no se auto-desbloquea')
 }
 
 console.log('\n═══ 4. Integridad: no eliminar cliente con deuda ═══')

@@ -1,72 +1,96 @@
 import { useState } from 'react'
-import { BadgeCheck } from 'lucide-react'
+import { Maximize2, ShieldCheck, Store, Sun } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
-import Logo from '../../assets/logo'
 import PseudoQR from './PseudoQR'
 import AvatarCliente from '../../components/ui/AvatarCliente'
 import SelectorAvatar from '../../components/ui/SelectorAvatar'
 import Card from '../../components/ui/Card'
+import './BilleteraCliente.css'
 
+// "Mi Carnet QR" con la interfaz de credencial digital de v0: tarjeta
+// celeste con la marca, avatar, DNI, QR identificatorio (PseudoQR del
+// DNI, el mismo que lee el mostrador) y botón de pantalla completa con
+// brillo alto para escanear en caja.
 export default function CarnetCliente() {
   const { clienteSesion: a, config } = useKiosco()
-  const [anio] = useState(() => new Date().getFullYear())
+  const [bright, setBright] = useState(false)
   if (!a) return null
 
+  // Pantalla completa + brillo visual para que el lector tome el QR al
+  // instante. Si el navegador deniega fullscreen, queda el modo brillante.
+  const mostrarGrande = async () => {
+    setBright((b) => !b)
+    try {
+      await document.documentElement.requestFullscreen?.()
+    } catch {
+      /* fullscreen denegado: el modo brillante sigue disponible */
+    }
+  }
+
   return (
-    <div className="flex flex-col items-center gap-5 py-4">
-      <div className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-gradient-to-br from-brand via-brand to-brand-dark p-6 text-white shadow-lg">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10" />
-        <div className="pointer-events-none absolute -bottom-20 -left-10 h-44 w-44 rounded-full bg-white/5" />
-
-        <div className="relative flex items-center gap-3">
-          <Logo className="h-9 w-9" />
-          <div>
-            <p className="text-sm font-bold leading-tight">{config.nombreKiosco}</p>
-            <p className="text-[11px] text-blue-200">Carnet digital del cliente</p>
+    <div className={`wallet-app${bright ? ' wallet-bright' : ''}`}>
+      <div className="wallet-shell">
+        <section className="credential-panel" role="tabpanel" aria-label="Mi Carnet QR">
+          <div className="credential-intro">
+            <p className="wallet-eyebrow">TU CREDENCIAL DIGITAL</p>
+            <h2>Un toque y listo.</h2>
+            <p>Mostrá tu carnet en el mostrador para pagar con tu billetera o fiado.</p>
           </div>
-        </div>
 
-        <div className="relative mt-6 rounded-2xl bg-white p-4 text-slate-800 shadow-md">
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col items-center gap-2">
-              <div className="rounded-xl border border-slate-100 bg-white p-1.5 shadow-sm">
-                <PseudoQR text={a.dni} size={118} />
-              </div>
-              <AvatarCliente cliente={a} className="h-12 w-12 ring-2 ring-brand-soft" iconSize={22} textoClassName="text-sm" />
+          <article className="credential-card">
+            <div className="credential-topline">
+              <span className="wallet-brand credential-brand">
+                <span className="wallet-brand-mark" aria-hidden="true">Y</span>
+                <span>Yapa</span>
+              </span>
+              <span className="credential-verified"><ShieldCheck size={15} />CLIENTE VERIFICADO</span>
             </div>
-            <div className="min-w-0">
-              <p className="text-base font-bold leading-tight text-slate-800">
-                {a.nombre} {a.apellido}
-              </p>
-              <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-brand">
-                <BadgeCheck size={13} /> Cliente verificado
-              </p>
-              <p className="mt-2 font-mono text-xs tracking-wider text-slate-500">DNI {a.dni}</p>
-              <div className="mt-2 flex h-6 items-end gap-[2px]" aria-hidden="true">
-                {a.dni.split('').map((d, i) => (
-                  <span
-                    key={i}
-                    className="inline-block w-[3px] bg-slate-800"
-                    style={{ height: `${8 + ((Number(d) * 7 + i * 3) % 16)}px` }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
 
-        <p className="relative mt-4 text-center text-[11px] text-blue-200">
-          Presentá este carnet en el mostrador · Válido {anio}
-        </p>
+            <div className="credential-customer">
+              <span className="customer-avatar">
+                <AvatarCliente cliente={a} className="h-full w-full" iconSize={26} textoClassName="text-base" />
+              </span>
+              <span>
+                <strong>{a.nombre} {a.apellido}</strong>
+                <small>DNI {a.dni}</small>
+              </span>
+              <span className="account-enabled">
+                <i style={a.deuda > 0 ? { background: '#f59e0b' } : undefined} />
+                {a.deuda > 0 ? 'Habilitada · Con deuda' : 'Habilitada · Al día'}
+              </span>
+            </div>
+
+            <div className="credential-qr-wrap">
+              <PseudoQR text={a.dni} size={220} />
+            </div>
+
+            <div className="credential-caption">
+              <strong>Tu Yapa, siempre a mano</strong>
+              <span>Acercá este QR al lector de caja</span>
+            </div>
+
+            <div className="credential-foot">
+              <span><Store size={14} />{config.nombreKiosco}</span>
+              <span>CLIENTE #{a.dni}</span>
+            </div>
+          </article>
+
+          <button type="button" className="brightness-button" onClick={mostrarGrande}>
+            <Sun size={18} /><span>Ampliar y subir brillo</span><Maximize2 size={16} />
+          </button>
+          <p className="credential-security">
+            <ShieldCheck size={14} /> Tu código identifica tu cuenta. Nunca compartas una captura.
+          </p>
+        </section>
+
+        <Card
+          title="Personalizá tu carnet"
+          subtitle="Elegí un avatar o subí tu foto (solo se guarda en este dispositivo)"
+          className="mx-auto w-full max-w-sm"
+        >
+          <SelectorAvatar cliente={a} />
+        </Card>
       </div>
-
-      <Card
-        title="Personalizá tu carnet"
-        subtitle="Elegí un avatar o subí tu foto (solo se guarda en este dispositivo)"
-        className="w-full max-w-sm"
-      >
-        <SelectorAvatar cliente={a} />
-      </Card>
     </div>
   )
 }

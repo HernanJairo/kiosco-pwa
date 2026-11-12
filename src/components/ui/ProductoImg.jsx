@@ -1,13 +1,16 @@
 import { createElement, useState } from 'react'
 import { iconoCategoria } from '../../utils/icons'
+import { fotosDe } from '../../utils/imagen'
 
-// Foto del producto con fallback al ícono de su categoría.
+// Foto principal del producto (fotos[0]) con fallback al ícono de su
+// categoría.
 export default function ProductoImg({ producto: p, className = '', iconSize = 18 }) {
   const [error, setError] = useState(false)
-  if (p.foto && !error) {
+  const principal = fotosDe(p)[0]
+  if (principal && !error) {
     return (
       <img
-        src={p.foto}
+        src={principal}
         alt={p.nombre}
         loading="lazy"
         onError={() => setError(true)}

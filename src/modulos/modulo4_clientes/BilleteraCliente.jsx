@@ -1,176 +1,257 @@
 import { useState } from 'react'
-import { ArrowDownToLine, ArrowUpToLine, BadgeCheck, ChevronRight, HandCoins, Hourglass, MessageCircle, NotebookPen, PackageCheck, Pencil, QrCode, Receipt, RotateCcw, ShoppingBag, Store, Wallet } from 'lucide-react'
+import {
+  ArrowDownLeft, ArrowRight, Check,
+  Clock3, HandCoins, Hourglass, NotebookPen, PackageCheck, PauseCircle, Plus, QrCode,
+  Receipt, RotateCcw, ShieldCheck, ShoppingBag, Sparkles, Store, Wallet,
+} from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
-import { waLink } from '../../utils/whatsapp'
+import { limiteFiadoVigente, progresoFiado } from '../../context/operaciones'
 import { fmtFechaHora, money } from '../../utils/format'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
-import AvatarCliente from '../../components/ui/AvatarCliente'
 import SelectorAvatar from '../../components/ui/SelectorAvatar'
 import PagoTransferenciaModal from './PagoTransferenciaModal'
+import PedidoQRModal from './PedidoQRModal'
 import BannerPinSeguridad from './BannerPinSeguridad'
-import PseudoQR from './PseudoQR'
+import './BilleteraCliente.css'
 
-const MOV_META = {
-  fiado: { icon: NotebookPen, bg: 'bg-amber-50 text-amber-600', label: 'Compra fiada' },
-  abono: { icon: HandCoins, bg: 'bg-emerald-50 text-emerald-600', label: 'Pago de deuda' },
-  recarga: { icon: Wallet, bg: 'bg-emerald-50 text-emerald-600', label: 'Recarga' },
-  compra: { icon: ShoppingBag, bg: 'bg-emerald-50 text-emerald-600', label: 'Compra' },
-  anulacion: { icon: RotateCcw, bg: 'bg-slate-100 text-slate-500', label: 'Anulación' },
+const ESTADO_ORDEN = {
+  en_preparacion: 'En preparación',
+  listo_retiro: 'Listo para retirar',
 }
 
+// Ícono + clase de color por tipo de movimiento de la libreta.
+const MOV_ICON = {
+  consumo: { cls: 'transaction-purchase', Icon: Store },
+  compra: { cls: 'transaction-purchase', Icon: ShoppingBag },
+  fiado: { cls: 'transaction-purchase', Icon: NotebookPen },
+  recarga: { cls: 'transaction-topup', Icon: ArrowDownLeft },
+  abono: { cls: 'transaction-topup', Icon: HandCoins },
+  anulacion: { cls: 'transaction-purchase', Icon: RotateCcw },
+  seguridad: { cls: 'transaction-transfer', Icon: ShieldCheck },
+}
+
+// "Mi Billetera" del cliente con la interfaz v0 (rama
+// v0/yapa-client-wallet): tarjeta de saldo azul con la llama PNG sobre
+// el degradado limpio, acciones rápidas, últimos movimientos y encargo
+// activo — todo conectado a useKiosco() y a los modales reales.
 export default function BilleteraCliente() {
-  const { clienteSesion: a, solicitudes, updateCliente, config } = useKiosco()
+  const { clienteSesion: a, solicitudes, ventas, encargos, updateCliente, config } = useKiosco()
   const [pagoTipo, setPagoTipo] = useState(null) // 'deuda' | 'recarga' | null
   const [perfilOpen, setPerfilOpen] = useState(false)
-  const [qrOpen, setQrOpen] = useState(false)
+  const [qrPedido, setQrPedido] = useState(null) // encargo listo → QR de retiro
+  const [llamaOk, setLlamaOk] = useState(true)
+
   if (!a) return null
 
   const pendientes = a.fiados.filter((f) => !f.pagado && f.pendiente > 0)
   const saldoFavor = Math.max(0, a.saldo - a.deuda)
-  const misPendientes = solicitudes.filter((p) => p.clienteId === a.id && p.tipo === 'TRANSFERENCIA_PENDIENTE' && p.estado === 'pendiente')
+  const misPendientes = solicitudes.filter(
+    (p) => p.clienteId === a.id && p.tipo === 'TRANSFERENCIA_PENDIENTE' && p.estado === 'pendiente'
+  )
   const totalPendiente = misPendientes.reduce((s, p) => s + p.monto, 0)
 
-  const irSeccion = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  const irTab = (key) => window.dispatchEvent(new CustomEvent('yapa:nav', { detail: key }))
-  const soporte = waLink(config.whatsapp, `Hola! Soy ${a.nombre} ${a.apellido} (DNI ${a.dni}), necesito ayuda con mi cuenta.`)
+  // Cuenta corriente: crédito disponible sobre el límite vigente.
+  const limite = limiteFiadoVigente(a, config)
+  const creditoDisponible = limite > 0 ? Math.max(0, limite - a.deuda) : 0
+  const creditoPct = limite > 0 ? Math.max(3, Math.round((creditoDisponible / limite) * 100)) : 0
 
-  const ACCESOS = [
-    { icon: Store, label: 'Ver catálogo', sub: 'Productos del kiosco', onClick: () => irTab('catalogo') },
-    { icon: PackageCheck, label: 'Mis encargos', sub: 'Pedidos para retirar en el local', onClick: () => irTab('encargos') },
-    { icon: NotebookPen, label: 'Mis fiados', sub: 'Libreta de cuenta corriente', onClick: () => irSeccion('seccion-fiados') },
-    { icon: Receipt, label: 'Movimientos', sub: 'Compras, recargas y abonos', onClick: () => irSeccion('seccion-movimientos') },
-    { icon: MessageCircle, label: 'Soporte por WhatsApp', sub: 'Ayuda del kiosco', href: soporte },
-  ]
+  // Desbloqueo automático del fiado: progreso mixto (compras + monto).
+  const prog = progresoFiado({ ventas, config }, a)
+  const pctDesbloqueo = Math.min(
+    100,
+    Math.min((prog.compras / Math.max(1, prog.minCompras)) * 100, (prog.acumulado / Math.max(1, prog.minMonto)) * 100)
+  )
+
+  // Encargo activo (el más reciente en preparación o listo para retirar).
+  const activo = (encargos || []).find(
+    (e) => e.clienteId === a.id && (e.estado === 'en_preparacion' || e.estado === 'listo_retiro')
+  )
+
+  const irTab = (key) => window.dispatchEvent(new CustomEvent('yapa:nav', { detail: key }))
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Primer ingreso: sugerir personalizar el PIN si sigue siendo el de fábrica */}
-      <BannerPinSeguridad pin={a.pin} dni={a.dni} onGuardar={(p) => updateCliente(a.id, { pin: p })} />
-
-      {/* Header degradado Celeste Wolt: saludo + saldo gigante + recarga */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#009DE0] to-[#0066B2] p-5 text-white shadow-lift sm:p-6">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 -left-10 h-44 w-44 rounded-full bg-white/5" />
-
-        <div className="relative flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setPerfilOpen(true)}
-              className="shrink-0 rounded-full ring-2 ring-white/40 transition-all duration-200 ease-out hover:ring-white/70 active:scale-95"
-              title="Personalizar avatar o foto"
-            >
-              <AvatarCliente cliente={a} className="h-12 w-12" iconSize={24} textoClassName="text-sm" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-extrabold tracking-tight">Hola, {a.nombre}</h1>
-              <p className="flex items-center gap-1 text-xs font-medium text-white/80">
-                <BadgeCheck size={13} /> DNI {a.dni} · verificado
-              </p>
-            </div>
+    <div className="wallet-app">
+      <div className="wallet-shell">
+        <section className="wallet-welcome">
+          <div>
+            <p className="wallet-eyebrow">TU CUENTA, A MANO</p>
+            <h1>Hola, {a.nombre} <span>!</span></h1>
+            <p>Lo de siempre, con una Yapa más.</p>
           </div>
           <button
             type="button"
+            className="welcome-badge"
             onClick={() => setPerfilOpen(true)}
-            className="shrink-0 rounded-full bg-white/15 p-2 transition-all duration-200 ease-out hover:bg-white/25 active:scale-95"
-            title="Editar perfil"
+            title="Personalizar avatar o foto"
           >
-            <Pencil size={14} />
+            <Sparkles size={16} /><span>Cliente del barrio</span>
           </button>
-        </div>
+        </section>
 
-        <div className="relative mt-6 flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-white/70">Saldo a favor</p>
-            <p className="mt-1 text-4xl font-extrabold tracking-tight sm:text-5xl">{money(saldoFavor)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPagoTipo('recarga')}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-4 py-2.5 text-sm font-bold text-[#009DE0] shadow-md transition-all duration-200 ease-out hover:bg-[#EBF7FD] active:scale-95"
-          >
-            <ArrowDownToLine size={16} /> Recargar saldo
-          </button>
-        </div>
-      </div>
-
-      {/* Alerta suave de deuda fiada con acción directa */}
-      {a.deuda > 0 && (
-        <div className="flex items-center gap-3 rounded-2xl bg-amber-50 px-4 py-3.5 ring-1 ring-inset ring-amber-200/70">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
-            <Hourglass size={18} strokeWidth={2} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-amber-800">Tenés {money(a.deuda)} en fiados pendientes</p>
-            <p className="text-xs text-amber-600">Pagalos con transferencia y el mostrador los acredita.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPagoTipo('deuda')}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-500 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all duration-200 ease-out hover:bg-amber-600 active:scale-95"
-          >
-            <ArrowUpToLine size={14} /> Pagar deuda
-          </button>
-        </div>
-      )}
-
-      {/* Credencial QR + filas de acceso estilo iOS */}
-      <div className="rounded-3xl bg-white p-5 shadow-soft">
-        <button
-          type="button"
-          onClick={() => setQrOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#009DE0] px-5 py-3.5 text-base font-bold text-white shadow-sm transition-all duration-200 ease-out hover:bg-[#0086C0] active:scale-[0.98]"
-        >
-          <QrCode size={19} /> Mostrar mi QR para cobrar
-        </button>
-
-        <ul className="mt-4 flex flex-col gap-2">
-          {ACCESOS.map(({ icon: Icon, label, sub, onClick, href }) => {
-            const inner = (
-              <>
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[#009DE0] shadow-sm">
-                  <Icon size={19} strokeWidth={2} />
-                </span>
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-bold text-[#202125]">{label}</span>
-                  <span className="block truncate text-xs text-slate-400">{sub}</span>
-                </span>
-                <ChevronRight size={17} className="shrink-0 text-slate-300 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-[#009DE0]" />
-              </>
-            )
-            const cls =
-              'group flex w-full items-center gap-3 rounded-2xl bg-[#F6F6F6] px-3.5 py-3 transition-all duration-200 ease-out hover:bg-[#EBF7FD] active:scale-[0.98]'
-            return (
-              <li key={label}>
-                {href ? (
-                  <a href={href} target="_blank" rel="noreferrer" className={cls}>
-                    {inner}
-                  </a>
+        <section className="wallet-panel wallet-panel-single" role="tabpanel" aria-label="Mi Billetera">
+          <div className="wallet-main-column">
+            {/* Contingencia operativa: fiados pausados por el kiosco */}
+            {config.fiadosActivos === false && (
+              <div className="flex items-center gap-2.5 rounded-xl bg-[#EBF7FD] px-4 py-2.5 text-xs font-medium text-[#007AB8]">
+                <PauseCircle size={15} className="shrink-0" />
+                <span>Los fiados están pausados temporalmente: podés seguir pagando con tu saldo prepago.</span>
+              </div>
+            )}
+            {/* Tarjeta azul de saldo + medallón de la llama */}
+            <article className="balance-card">
+              <div className="balance-card-copy">
+                <span className="balance-label"><Wallet size={15} /> Saldo disponible</span>
+                <strong className="balance-amount">{money(saldoFavor)}</strong>
+                <span className="balance-caption">Listo para usar en el kiosco</span>
+                <div className="balance-divider" />
+                <div className="credit-heading">
+                  <span><span className="credit-status-dot" /> Cuenta corriente</span>
+                  {a.deuda > 0
+                    ? <strong className="debt-pill" style={{ background: '#ffffff2e' }}><Clock3 size={13} /> Debe {money(a.deuda)}</strong>
+                    : <strong className="debt-pill"><Check size={13} /> Al día</strong>}
+                </div>
+                {limite > 0 ? (
+                  <>
+                    <div className="credit-summary">
+                      <span>Disponible para fiar</span>
+                      <strong>{money(creditoDisponible)} <i>de {money(limite)}</i></strong>
+                    </div>
+                    <div className="credit-track" role="progressbar" aria-label="Crédito disponible para fiar" aria-valuenow={creditoPct} aria-valuemin={0} aria-valuemax={100}>
+                      <span style={{ width: `${creditoPct}%` }} />
+                    </div>
+                  </>
+                ) : a.fiadoBloqueado ? (
+                  <div className="credit-summary"><span>Cuenta corriente deshabilitada · consultá en caja</span></div>
                 ) : (
-                  <button type="button" onClick={onClick} className={cls}>
-                    {inner}
+                  <>
+                    {/* Regla antifraude: progreso mixto hacia el desbloqueo
+                        automático (compras mínimas Y monto acumulado). */}
+                    <div className="credit-summary">
+                      <span>Para desbloquear Cta. Corriente</span>
+                      <strong>{prog.compras} / {prog.minCompras} compras <i>· {money(prog.acumulado)} / {money(prog.minMonto)}</i></strong>
+                    </div>
+                    <div className="credit-track" role="progressbar" aria-label="Progreso para desbloquear cuenta corriente" aria-valuenow={Math.round(pctDesbloqueo)} aria-valuemin={0} aria-valuemax={100}>
+                      <span style={{ width: `${Math.max(3, pctDesbloqueo)}%` }} />
+                    </div>
+                  </>
+                )}
+              </div>
+              {llamaOk && (
+                <div className="balance-illustration">
+                  <img
+                    src="/llama-yapa.png?v=2"
+                    alt="Yapa"
+                    className="balance-llama"
+                    onError={() => setLlamaOk(false)}
+                  />
+                </div>
+              )}
+              <span className="balance-glint" aria-hidden="true"><Sparkles size={15} /></span>
+            </article>
+
+            {/* Acciones rápidas reales: recarga, pago de deuda y carnet */}
+            <section className="quick-actions" aria-label="Acciones rápidas">
+              <button type="button" onClick={() => setPagoTipo('recarga')}>
+                <span className="quick-icon quick-blue"><Plus size={19} /></span>
+                <strong>Cargar saldo</strong>
+              </button>
+              <button type="button" onClick={() => setPagoTipo('deuda')}>
+                <span className="quick-icon quick-lilac"><HandCoins size={19} /></span>
+                <strong>Pagar fiado</strong>
+              </button>
+              <button type="button" onClick={() => irTab('carnet')}>
+                <span className="quick-icon quick-green"><QrCode size={18} /></span>
+                <strong>Pagar en caja</strong>
+              </button>
+            </section>
+
+            {/* Encargo activo con QR de retiro real */}
+            {activo && (
+              <article className="active-order-card">
+                <div className="order-card-head">
+                  <span className="order-icon"><PackageCheck size={16} /></span>
+                  <span><small>ENCARGO ACTIVO</small><strong>#{activo.id.slice(0, 8).toUpperCase()}</strong></span>
+                  <span className="order-ready" style={activo.estado === 'en_preparacion' ? { color: '#b45309' } : undefined}>
+                    <span style={activo.estado === 'en_preparacion' ? { background: '#f59e0b' } : undefined} />
+                    {ESTADO_ORDEN[activo.estado]}
+                  </span>
+                </div>
+                <div className="order-product-lines">
+                  {activo.items.slice(0, 3).map((i) => (
+                    <span key={i.productoId}>{i.nombre} <i>× {i.cantidad}</i></span>
+                  ))}
+                  {activo.items.length > 3 && <span><i>y {activo.items.length - 3} más…</i></span>}
+                </div>
+                <div className="order-card-bottom">
+                  <span>Total del encargo</span>
+                  <strong>{money(activo.total)}</strong>
+                </div>
+                {activo.estado === 'listo_retiro' ? (
+                  <button type="button" className="pickup-qr-button" onClick={() => setQrPedido(activo)}>
+                    <QrCode size={17} />Mostrar QR de retiro en caja<ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <button type="button" className="pickup-qr-button" onClick={() => irTab('encargos')}>
+                    <Clock3 size={17} />Ver el estado de tu pedido<ArrowRight size={16} />
                   </button>
                 )}
-              </li>
-            )
-          })}
-        </ul>
-      </div>
+              </article>
+            )}
 
-      {totalPendiente > 0 && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-800">
-          <Hourglass size={14} className="shrink-0 text-amber-500" />
-          <span>
-            Transferencia de <b>{money(totalPendiente)}</b> pendiente de acreditación
-            {misPendientes.length > 1 ? ` (${misPendientes.length} avisos)` : ''}
-          </span>
-        </div>
-      )}
+            {totalPendiente > 0 && (
+              <div className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-medium text-amber-800">
+                <Hourglass size={14} className="shrink-0 text-amber-500" />
+                <span>
+                  Transferencia de <b>{money(totalPendiente)}</b> pendiente de acreditación
+                  {misPendientes.length > 1 ? ` (${misPendientes.length} avisos)` : ''}
+                </span>
+              </div>
+            )}
 
-      <div id="seccion-fiados">
+            {/* Últimos movimientos de la billetera */}
+            <section className="transactions-section">
+              <div className="wallet-section-heading">
+                <div>
+                  <p className="wallet-eyebrow">TU ACTIVIDAD</p>
+                  <h2>Últimos movimientos</h2>
+                </div>
+                <button type="button" className="link-button" onClick={() => irTab('historial')}>
+                  Ver todos <ArrowRight size={15} />
+                </button>
+              </div>
+              {a.movimientos.length === 0 ? (
+                <EmptyState icon={Receipt} title="Sin movimientos todavía" sub="Tus compras y recargas van a aparecer acá." />
+              ) : (
+                <div className="transaction-list">
+                  {a.movimientos.slice(0, 6).map((m) => {
+                    const meta = MOV_ICON[m.tipo] || MOV_ICON.compra
+                    return (
+                      <article className="transaction-row" key={m.id}>
+                        <span className={`transaction-icon ${meta.cls}`}><meta.Icon size={18} /></span>
+                        <div className="transaction-info">
+                          <strong>{m.detalle}</strong>
+                          <span>{fmtFechaHora(m.fecha)}</span>
+                        </div>
+                        <strong className={`transaction-amount${m.monto > 0 ? ' positive' : ''}`}>
+                          {m.monto > 0 ? '+' : '−'}{money(Math.abs(m.monto))}
+                        </strong>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+
+            {/* Aviso de PIN de fábrica: debajo de los movimientos para no
+                empujar la tarjeta de saldo hacia abajo. */}
+            <BannerPinSeguridad pin={a.pin} dni={a.dni} onGuardar={(p) => updateCliente(a.id, { pin: p })} />
+          </div>
+        </section>
+
+        {/* Libreta de fiados: la lógica de cuenta corriente se mantiene */}
         <Card
           title="Libreta de fiados"
           subtitle="Detalle de compras al fiado con saldo pendiente"
@@ -204,39 +285,6 @@ export default function BilleteraCliente() {
         </Card>
       </div>
 
-      <div id="seccion-movimientos">
-        <Card title="Historial de movimientos" subtitle="Compras, abonos de deuda y recargas">
-          {a.movimientos.length === 0 ? (
-            <EmptyState title="Sin movimientos todavía" />
-          ) : (
-            <ul className="flex flex-col">
-              {a.movimientos.map((m) => {
-                const meta = MOV_META[m.tipo] || MOV_META.compra
-                const Icon = meta.icon
-                return (
-                  <li key={m.id} className="flex items-center gap-3 border-b border-slate-50 py-3 last:border-0">
-                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
-                      <Icon size={16} strokeWidth={2} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-800">{m.detalle}</p>
-                      <p className="text-xs text-slate-400">{fmtFechaHora(m.fecha)}</p>
-                    </div>
-                    <span
-                      className={`text-sm font-bold ${
-                        m.monto < 0 || m.tipo === 'recarga' ? 'text-emerald-600' : 'text-amber-600'
-                      }`}
-                    >
-                      {m.monto < 0 ? '− ' : '+ '}{money(Math.abs(m.monto))}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Card>
-      </div>
-
       <PagoTransferenciaModal
         cliente={a}
         origen="cliente"
@@ -245,21 +293,15 @@ export default function BilleteraCliente() {
         onClose={() => setPagoTipo(null)}
       />
 
-      {/* QR a pantalla completa para escanear en mostrador */}
-      <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Tu QR de cliente">
-        <div className="flex flex-col items-center gap-4 py-2">
-          <div className="rounded-3xl bg-white shadow-soft p-6 shadow-soft">
-            <PseudoQR text={a.dni} size={220} />
-          </div>
-          <div className="text-center">
-            <p className="text-base font-bold text-slate-800">{a.nombre} {a.apellido}</p>
-            <p className="font-mono text-sm tracking-widest text-slate-500">DNI {a.dni}</p>
-          </div>
-          <p className="text-center text-xs text-slate-400">
-            Mostrá este código en el mostrador para identificarte al instante.
-          </p>
-        </div>
-      </Modal>
+      {/* QR real del encargo listo para retirar */}
+      {qrPedido && (
+        <PedidoQRModal
+          cliente={a}
+          encargos={[qrPedido]}
+          open
+          onClose={() => setQrPedido(null)}
+        />
+      )}
 
       <Modal open={perfilOpen} onClose={() => setPerfilOpen(false)} title="Tu avatar y foto" wide>
         <SelectorAvatar cliente={a} />

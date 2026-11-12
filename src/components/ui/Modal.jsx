@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { X } from 'lucide-react'
 
-export default function Modal({ open, onClose, title, wide = false, children }) {
+export default function Modal({ open, onClose, title, wide = false, className = '', bodyClassName = '', children }) {
   useEffect(() => {
     if (!open) return
     const onKey = (e) => e.key === 'Escape' && onClose?.()
@@ -25,7 +25,7 @@ export default function Modal({ open, onClose, title, wide = false, children }) 
       <div className="absolute inset-0 bg-[#202125]/50 backdrop-blur-sm" onClick={onClose} />
       <div
         className={`pop-in relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white shadow-lift sm:rounded-3xl ${
-          wide ? 'sm:max-w-2xl' : 'sm:max-w-md'
+          className || (wide ? 'sm:max-w-2xl' : 'sm:max-w-md')
         }`}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -38,7 +38,7 @@ export default function Modal({ open, onClose, title, wide = false, children }) 
             <X size={18} />
           </button>
         </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
+        <div className={`overflow-y-auto px-5 py-4 ${bodyClassName}`}>{children}</div>
       </div>
     </div>
   )

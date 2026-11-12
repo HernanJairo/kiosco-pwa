@@ -66,25 +66,40 @@ function encodeICO(pngBuffer, size) {
 }
 
 /* ---------- Dibujo del ícono ---------- */
+// Isotipo oficial "Yapa": cuadrado redondeado celeste #009DE0 con la Y
+// geométrica blanca en negrita y el punto de acento ámbar (misma pieza
+// que src/assets/logo.jsx y public/favicon.svg).
 const lerp = (a, b, t) => Math.round(a + (b - a) * t);
-const INDIGO_TOP = [99, 102, 241]; // #6366F1
-const INDIGO_BOT = [67, 56, 202]; // #4338CA
-const EMERALD = [16, 185, 129]; // #10B981
+const BLUE = [0, 157, 224]; // #009DE0
+const BLUE_DARK = [0, 102, 178]; // #0066B2
+const AMBER = [251, 191, 36]; // #FBBF24
 const WHITE = [255, 255, 255];
 
-const K_GLYPH = ['X...X', 'X..X.', 'X.X..', 'XX...', 'X.X..', 'X..X.', 'X...X'];
+// Geometría del isotipo en un lienzo lógico de 48×48.
+const L = 48;
+const Y_STROKES = [
+  [14, 14, 24, 25], // brazo izquierdo
+  [34, 14, 24, 25], // brazo derecho
+  [24, 25, 24, 36], // tallo
+];
+const STROKE_W = 5.4;
+const DOT = { x: 36, y: 12, r: 3.4 };
+
+const distSeg = (px, py, ax, ay, bx, by) => {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+};
 
 function drawIcon(size, { maskable = false } = {}) {
   const px = Buffer.alloc(size * size * 4);
-  const radius = maskable ? 0 : size * 0.22;
-  const cx = size / 2;
-  const cy = size / 2;
-  const circleR = size * (maskable ? 0.27 : 0.3);
-  const cell = size * (maskable ? 0.048 : 0.055);
-  const gw = 5 * cell;
-  const gh = 7 * cell;
-  const gx = cx - gw / 2;
-  const gy = cy - gh / 2;
+  const radius = maskable ? 0 : size * 0.25;
+  // En maskable el contenido se encoge para quedar dentro de la zona
+  // segura (~80%): el lienzo lógico 48×48 se mapea a ese recuadro.
+  const pad = maskable ? size * 0.1 : 0;
+  const s = (size - 2 * pad) / L; // px por unidad lógica
+  const aa = 1.2 / s; // ancho de antialiasing en unidades lógicas
 
   const insideRound = (x, y) => {
     if (radius === 0) return true;
@@ -97,6 +112,12 @@ function drawIcon(size, { maskable = false } = {}) {
     return dx * dx + dy * dy <= radius * radius;
   };
 
+  const blend = (base, over, t) => [
+    lerp(base[0], over[0], t),
+    lerp(base[1], over[1], t),
+    lerp(base[2], over[2], t),
+  ];
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
@@ -104,23 +125,26 @@ function drawIcon(size, { maskable = false } = {}) {
         px[i + 3] = 0;
         continue;
       }
-      const t = y / size;
-      let r = lerp(INDIGO_TOP[0], INDIGO_BOT[0], t);
-      let g = lerp(INDIGO_TOP[1], INDIGO_BOT[1], t);
-      let b = lerp(INDIGO_TOP[2], INDIGO_BOT[2], t);
+      // Fondo: degradado celeste diagonal (#009DE0 → #0066B2).
+      const t = Math.min(1, Math.max(0, (x + y) / (2 * size)));
+      let rgb = blend(BLUE, BLUE_DARK, t);
 
-      const dCircle = Math.hypot(x - cx, y - cy);
-      if (dCircle <= circleR) {
-        [r, g, b] = WHITE;
-        const kx = Math.floor((x - gx) / cell);
-        const ky = Math.floor((y - gy) / cell);
-        if (ky >= 0 && ky < 7 && kx >= 0 && kx < 5 && K_GLYPH[ky][kx] === 'X') {
-          [r, g, b] = EMERALD;
-        }
-      }
-      px[i] = r;
-      px[i + 1] = g;
-      px[i + 2] = b;
+      // Coordenadas lógicas del lienzo 48×48.
+      const lx = (x - pad) / s;
+      const ly = (y - pad) / s;
+
+      // Punto ámbar de acento.
+      const dDot = Math.hypot(lx - DOT.x, ly - DOT.y) - DOT.r;
+      if (dDot < aa) rgb = blend(rgb, AMBER, Math.min(1, Math.max(0, 1 - dDot / aa)));
+
+      // Y blanca: distancia mínima a los tres trazos.
+      const d = Math.min(...Y_STROKES.map(([ax, ay, bx, by]) => distSeg(lx, ly, ax, ay, bx, by)));
+      const edge = d - STROKE_W / 2;
+      if (edge < aa) rgb = blend(rgb, WHITE, Math.min(1, Math.max(0, 1 - edge / aa)));
+
+      px[i] = rgb[0];
+      px[i + 1] = rgb[1];
+      px[i + 2] = rgb[2];
       px[i + 3] = 255;
     }
   }
@@ -132,7 +156,7 @@ const targets = [
   { name: 'icon-192.png', size: 192 },
   { name: 'icon-512.png', size: 512 },
   { name: 'icon-maskable-512.png', size: 512, maskable: true },
-  { name: 'apple-touch-icon-180.png', size: 180, maskable: true }, // iOS requiere fondo opaco
+  { name: 'apple-touch-icon.png', size: 180, maskable: true }, // iOS requiere fondo opaco
 ];
 
 for (const t of targets) {

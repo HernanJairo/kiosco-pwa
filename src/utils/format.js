@@ -14,6 +14,10 @@ export const fmtFechaHora = (iso) =>
 export const fmtHora = (iso) =>
   new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 
+// Fecha larga de hoy para encabezados de reportes ("jueves, 12 de noviembre").
+export const fechaLargaHoy = () =>
+  new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+
 export const hoyISO = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(

@@ -1,7 +1,7 @@
 {
-  "name": "Yapa — Kiosco Escolar",
+  "name": "Yapa",
   "short_name": "Yapa",
-  "description": "Gestión integral del kiosco escolar: catálogo, ventas, fiados, vencimientos y reportes.",
+  "description": "Gestión integral del kiosco: catálogo, ventas, fiados, vencimientos y reportes.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

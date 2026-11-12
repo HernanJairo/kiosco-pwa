@@ -33,6 +33,12 @@ export function nuevoCliente({ nombre, apellido = '', dni, telefono = '', email 
     saldo: 0,
     deuda: 0,
     limiteFiado: Math.max(0, Number(limiteFiado) || 0),
+    // Regla antifraude: el cliente nace SIN cuenta corriente
+    // (fiadoHabilitado:false); se desbloquea por antigüedad de compras
+    // o por habilitación manual del administrador. Los clientes de bases
+    // viejas (sin el campo) conservan su comportamiento anterior.
+    fiadoHabilitado: Math.max(0, Number(limiteFiado) || 0) > 0,
+    fiadoBloqueado: false,
     avatar: null,
     fiados: [],
     movimientos: [],
@@ -222,11 +228,45 @@ export function abonarFiados(cliente, monto) {
 }
 
 // Límite de cuenta corriente vigente para el cliente: su tope propio si
-// tiene uno cargado; si no, el global del kiosco.
+// tiene uno cargado; si no, el global del kiosco. Devuelve 0 cuando el
+// fiado no está habilitado (cliente nuevo) o está bloqueado por el admin:
+// así POS y billetera lo tratan automáticamente como "solo prepago".
 export function limiteFiadoVigente(cliente, config) {
+  if (!cliente || cliente.fiadoBloqueado === true || cliente.fiadoHabilitado === false) return 0
   const propio = Number(cliente?.limiteFiado) || 0
   if (propio > 0) return propio
   return Number(config?.limiteFiadoGlobal) || 0
+}
+
+// Progreso del cliente hacia el desbloqueo automático del fiado:
+// cantidad de compras concretadas y monto acumulado (ventas vigentes, sin
+// tickets en espera de transferencia ni anuladas).
+export function progresoFiado(db, cliente) {
+  const mias = (db.ventas || []).filter(
+    (v) => v.clienteId === cliente?.id && !v.anulada && v.estado !== 'en_espera_transferencia'
+  )
+  return {
+    compras: mias.length,
+    acumulado: mias.reduce((s, v) => s + (v.total || 0), 0),
+    minCompras: Math.max(1, Number(db.config?.comprasMinimasParaFiado) || 10),
+    minMonto: Math.max(0, Number(db.config?.montoMinimoParaFiado) || 20000),
+  }
+}
+
+// Desbloqueo automático de la cuenta corriente: cuando el cliente junta
+// la cantidad de compras Y el monto configurados, se le habilita el
+// límite inicial. Devuelve { cliente, limite } si se desbloqueó, o null
+// (ya habilitado, bloqueado por el admin, o requisitos sin cumplir).
+export function desbloquearFiadoDb(db, clienteId) {
+  const c = (db.clientes || []).find((x) => x.id === clienteId)
+  if (!c || c.fiadoBloqueado === true || c.fiadoHabilitado !== false) return null
+  const p = progresoFiado(db, c)
+  if (p.compras < p.minCompras || p.acumulado < p.minMonto) return null
+  const limite = Math.max(0, Number(db.config?.limiteFiadoInicialDesbloqueado) || 0)
+  if (limite <= 0) return null
+  c.fiadoHabilitado = true
+  c.limiteFiado = limite
+  return { cliente: c, limite }
 }
 
 /* ================= VENTAS ================= */
@@ -267,7 +307,16 @@ export function validarVenta(db, { items, metodo, clienteId = null, excepcionFia
     }
   }
   if (metodo === 'fiado') {
+    if (db.config?.fiadosActivos === false) {
+      throw new Error('Los fiados están pausados temporalmente por el kiosco.')
+    }
     if (!cliente) throw new Error('La venta en cuenta corriente exige seleccionar un cliente registrado.')
+    if (cliente.fiadoBloqueado === true) {
+      throw new Error(`La cuenta corriente de ${cliente.nombre} está bloqueada por el kiosco.`)
+    }
+    if (cliente.fiadoHabilitado === false) {
+      throw new Error(`${cliente.nombre} ${cliente.apellido} aún no tiene la Cuenta Corriente habilitada: por ahora puede pagar con saldo prepago.`)
+    }
     const limite = limiteFiadoVigente(cliente, db.config)
     if (limite <= 0 && !(cliente.saldo > 0)) {
       throw new Error(`${cliente.nombre} ${cliente.apellido} no tiene saldo a favor ni límite de cuenta corriente habilitado.`)
@@ -516,6 +565,11 @@ export const solicitudesPendientesDe = (db) =>
 export const ESTADOS_ENCARGO = ['en_preparacion', 'listo_retiro', 'entregado', 'cancelado']
 
 export function nuevoEncargo(db, { clienteId, items, retiroTercero = null }) {
+  // Contingencia operativa: encargos pausados globalmente (el QR Express
+  // no pasa por acá, así que no se ve afectado).
+  if (db.config?.encargosActivos === false) {
+    throw new Error('Los encargos están pausados temporalmente.')
+  }
   const cliente = (db.clientes || []).find((c) => c.id === clienteId)
   if (!cliente) throw new Error('El encargo exige un cliente registrado.')
   if (!Array.isArray(items) || !items.length) throw new Error('El pedido está vacío.')

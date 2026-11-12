@@ -23,7 +23,6 @@ import {
 import { useKiosco } from '../../context/KioscoContext'
 import { fmtFechaHora, money } from '../../utils/format'
 import { archivoADataURL } from '../../utils/imagen'
-import Logo from '../../assets/logo'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
@@ -34,10 +33,21 @@ import SwitchEstado from '../ui/SwitchEstado'
 import AcercaDeModal from '../AcercaDeModal'
 
 const ROL_LABEL = { cliente: 'Cliente', vendedor: 'Vendedor', admin: 'Admin' }
-const ROL_TONE = { cliente: 'brand', vendedor: 'amber', admin: 'rose' }
 const ROLES_MOSTRADOR = ['vendedor', 'admin']
 
+// Isotipo oficial de Yapa (el mismo del login v0): cuadrado celeste
+// inclinado -4° con la "Y" blanca en negrita.
+function YapaMark({ className = 'h-9 w-9', texto = 'text-xl' }) {
+  return (
+    <span className={`grid shrink-0 -rotate-[4deg] place-items-center rounded-xl bg-[#009DE0] shadow-[0_5px_12px_rgba(0,157,224,0.18)] ${className}`}>
+      <span className={`rotate-[4deg] font-black leading-none text-white ${texto}`}>Y</span>
+    </span>
+  )
+}
+
 const NOTIF_ICON = {
+  venta: { icon: ShoppingBag, bg: 'bg-sky-50 text-sky-600' },
+  encargo: { icon: PackageOpen, bg: 'bg-emerald-50 text-emerald-600' },
   pago: { icon: Hourglass, bg: 'bg-amber-50 text-amber-600' },
   acreditada: { icon: CheckCircle2, bg: 'bg-emerald-50 text-emerald-600' },
   rechazada: { icon: XCircle, bg: 'bg-rose-50 text-rose-500' },
@@ -171,7 +181,7 @@ export default function TopBar({ onMenu }) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-[#F3F3F3] bg-white/95 shadow-[0_4px_20px_rgba(32,33,37,0.05)] backdrop-blur">
         <div className="relative mx-auto flex h-14 max-w-[1440px] items-center justify-between gap-3 px-4">
           <div className="flex min-w-0 items-center gap-2.5">
             {/* Hamburguesa: abre el cajón lateral del menú en <lg */}
@@ -179,37 +189,39 @@ export default function TopBar({ onMenu }) {
               <button
                 onClick={onMenu}
                 aria-label="Abrir menú"
-                className="-ml-1 rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 md:hidden"
+                className="-ml-1 rounded-xl bg-[#F6F6F6] p-2 text-[#555963] transition-colors hover:bg-[#EBF7FD] hover:text-[#007AB8] md:hidden"
               >
                 <Menu size={20} />
               </button>
             )}
-            {/* Marca: isotipo "Y" + nombre. "Acerca de" vive en el drawer. */}
+            {/* Marca: isotipo oficial "Y" + wordmark. "Acerca de" vive en el drawer. */}
             <div className="flex min-w-0 items-center gap-2.5 px-1 py-0.5">
-              <Logo className="h-8 w-8 shrink-0" />
+              <YapaMark className="h-9 w-9" texto="text-xl" />
               <div className="min-w-0">
-                <p className="text-sm font-bold leading-none text-slate-800">
+                <p className="text-base font-extrabold leading-none tracking-tight text-[#202125]">
                   Yapa
                 </p>
-                <p className="mt-0.5 truncate text-[11px] text-slate-400">{config.nombreKiosco}</p>
+                <p className="mt-1 truncate text-[11px] font-medium text-[#90929A]">{config.nombreKiosco}</p>
               </div>
             </div>
           </div>
 
           {session && (
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              {/* Cliente: sin accesos rápidos (viven en el menú lateral):
+                  solo pill de estado informativo + campanita + rol + Salir. */}
               {/* Centro de solicitudes: contador de pendientes del mostrador */}
               {puedeAlternar && (
                 <button
                   onClick={() => setSolicitudesOpen(true)}
                   title="Bandeja de solicitudes"
-                  className={`relative hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition-colors md:inline-flex ${
+                  className={`relative hidden items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors md:inline-flex ${
                     pendientes.length > 0
-                      ? 'bg-amber-50 text-amber-700 ring-amber-200 hover:bg-amber-100'
-                      : 'bg-slate-50 text-slate-500 ring-slate-200 hover:bg-slate-100'
+                      ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                      : 'bg-[#F6F6F6] text-[#555963] hover:bg-[#EBF7FD] hover:text-[#007AB8]'
                   }`}
                 >
-                  <Inbox size={13} />
+                  <Inbox size={14} />
                   <span className="hidden sm:inline">Solicitudes</span>
                   {pendientes.length > 0 && (
                     <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
@@ -218,12 +230,20 @@ export default function TopBar({ onMenu }) {
                   )}
                 </button>
               )}
-              {/* Switch animado tipo iOS: el staff alterna el estado del
-                  kiosco; los clientes lo ven como indicador de solo lectura. */}
+              {/* Estado del kiosco: switch interactivo SOLO para el personal
+                  (vendedor/admin); el cliente ve un pill informativo. */}
               {puedeAlternar ? (
                 <SwitchEstado abierto={config.abierto} onToggle={toggleAbierto} />
               ) : (
-                <SwitchEstado abierto={config.abierto} />
+                <span
+                  role="status"
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                    config.abierto ? 'bg-[#EAF8EF] text-[#45875F]' : 'bg-[#FDF0EA] text-[#A25A3C]'
+                  }`}
+                >
+                  <i className={`h-1.5 w-1.5 rounded-full ${config.abierto ? 'bg-[#43BD72]' : 'bg-[#E49B77]'}`} />
+                  {config.abierto ? 'Abierto' : 'Cerrado'}
+                </span>
               )}
 
               {/* Campanita: centro de notificaciones unificado por rol.
@@ -232,8 +252,8 @@ export default function TopBar({ onMenu }) {
                 onClick={() => setNotifOpen((v) => !v)}
                 title="Notificaciones"
                 aria-label={`Notificaciones${noLeidas ? ` (${noLeidas} sin leer)` : ''}`}
-                className={`relative rounded-full p-2 transition-colors ${
-                  notifOpen ? 'bg-brand-soft text-brand' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                className={`relative rounded-xl p-2 transition-colors ${
+                  notifOpen ? 'bg-[#EBF7FD] text-[#007AB8]' : 'bg-[#F6F6F6] text-[#555963] hover:bg-[#EBF7FD] hover:text-[#007AB8]'
                 }`}
               >
                 <Bell size={17} />
@@ -244,31 +264,23 @@ export default function TopBar({ onMenu }) {
                 )}
               </button>
 
-              {/* Badge + nombre: para el equipo abre "Mi Perfil" */}
+              {/* Pill elegante "Rol · Nombre": para el equipo abre "Mi Perfil" */}
               {yo ? (
                 <button
                   type="button"
                   onClick={() => setPerfilOpen(true)}
                   title="Mi Perfil"
-                  className="hidden items-center gap-2 rounded-full py-0.5 pl-0.5 pr-1.5 transition-colors hover:bg-slate-100 md:flex"
+                  className="hidden items-center gap-2 rounded-full bg-[#F6F6F6] py-1 pl-1 pr-3 shadow-[0_2px_10px_rgba(32,33,37,0.05)] transition-colors hover:bg-[#EBF7FD] md:flex"
                 >
                   <AvatarPersonal persona={yo} className="h-7 w-7" textoClassName="text-[10px]" />
-                  <Badge tone={ROL_TONE[session.rol]} className="hidden sm:inline-flex">
-                    {ROL_LABEL[session.rol]}
-                  </Badge>
-                  <span className="hidden max-w-40 truncate text-sm font-medium text-slate-700 md:block">
-                    {session.nombre}
+                  <span className="max-w-44 truncate text-xs font-bold text-[#555963]">
+                    {ROL_LABEL[session.rol]} · {session.nombre}
                   </span>
                 </button>
               ) : (
-                <>
-                  <Badge tone={ROL_TONE[session.rol]} className="hidden sm:inline-flex">
-                    {ROL_LABEL[session.rol]}
-                  </Badge>
-                  <span className="hidden max-w-40 truncate text-sm font-medium text-slate-700 md:block">
-                    {session.nombre}
-                  </span>
-                </>
+                <span className="hidden max-w-48 items-center truncate rounded-full bg-[#F6F6F6] px-3 py-2 text-xs font-bold text-[#555963] shadow-[0_2px_10px_rgba(32,33,37,0.05)] md:inline-flex">
+                  {ROL_LABEL[session.rol]} · {session.nombre}
+                </span>
               )}
               <Button variant="secondary" size="sm" onClick={logout}>
                 <LogOut size={14} />

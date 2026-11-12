@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   BarChart3,
+  Bell,
   Boxes,
   CalendarClock,
+  ClipboardList,
   Clock,
   HandCoins,
+  History,
   IdCard,
   KeyRound,
-  LogIn,
+  LifeBuoy,
   MapPin,
   MessageCircle,
   Package,
@@ -24,10 +27,10 @@ import { useKiosco } from './context/KioscoContext'
 import { waLink } from './utils/whatsapp'
 import TopBar from './components/layout/TopBar'
 import LandingHeader from './components/layout/LandingHeader'
+import CintaContingencia from './components/ui/CintaContingencia'
 import RoleNav from './components/layout/RoleNav'
 import Footer from './components/layout/Footer'
 import SplashScreen from './components/SplashScreen'
-import Badge from './components/ui/Badge'
 import Modal from './components/ui/Modal'
 import CatalogoPublico from './modulos/modulo1_catalogo_auth/CatalogoPublico'
 import LoginPanel from './modulos/modulo1_catalogo_auth/LoginPanel'
@@ -41,8 +44,11 @@ import TerminalPOS from './modulos/modulo5_ventas/TerminalPOS'
 import AuditoriaVentas from './modulos/modulo5_ventas/AuditoriaVentas'
 import CobranzaClientes from './modulos/modulo5_ventas/CobranzaClientes'
 import EncargosPanel from './modulos/modulo5_ventas/EncargosPanel'
+import NotificacionesPanel from './modulos/modulo5_ventas/NotificacionesPanel'
 import MisEncargos from './modulos/modulo4_clientes/MisEncargos'
-import Dashboard from './modulos/modulo6_reportes/Dashboard'
+import HistorialCliente from './modulos/modulo4_clientes/HistorialCliente'
+import SoporteCliente from './modulos/modulo4_clientes/SoporteCliente'
+import ReportesAdmin from './modulos/modulo6_reportes/ReportesAdmin'
 import ConfiguracionKiosco, { PanelMiAcceso } from './modulos/admin/ConfiguracionKiosco'
 
 const TABS = {
@@ -51,6 +57,8 @@ const TABS = {
     { key: 'billetera', label: 'Mi Billetera', icon: Wallet },
     { key: 'encargos', label: 'Mis Encargos', icon: PackageCheck },
     { key: 'carnet', label: 'Mi Carnet', icon: IdCard },
+    { key: 'historial', label: 'Historial', icon: History },
+    { key: 'soporte', label: 'Soporte', icon: LifeBuoy },
   ],
   vendedor: [
     { key: 'pos', label: 'Terminal POS', icon: ShoppingCart },
@@ -58,6 +66,9 @@ const TABS = {
     { key: 'encargos', label: 'Encargos', icon: PackageCheck },
     { key: 'stock', label: 'Stock Rápido', icon: Boxes },
     { key: 'catalogo', label: 'Catálogo', icon: Store },
+    { key: 'clientes', label: 'Clientes', icon: Users },
+    { key: 'ventas', label: 'Ventas', icon: Receipt },
+    { key: 'actividad', label: 'Mi Actividad', icon: ClipboardList },
     { key: 'cuenta', label: 'Mi Cuenta', icon: KeyRound },
   ],
   admin: [
@@ -73,13 +84,14 @@ const TABS = {
     { key: 'vencimientos', label: 'Vencimientos', icon: CalendarClock },
     { key: 'clientes', label: 'Clientes', icon: Users },
     { key: 'ventas', label: 'Ventas', icon: Receipt },
+    { key: 'notifs', label: 'Notificaciones', icon: Bell },
     { key: 'reportes', label: 'Reportes', icon: BarChart3 },
   ],
 }
 
 const MODULOS = {
-  cliente: { catalogo: CatalogoPublico, billetera: BilleteraCliente, encargos: MisEncargos, carnet: CarnetCliente },
-  vendedor: { pos: TerminalPOS, cobranza: CobranzaClientes, encargos: EncargosPanel, stock: StockRapido, catalogo: CatalogoPublico, cuenta: PanelMiAcceso },
+  cliente: { catalogo: CatalogoPublico, billetera: BilleteraCliente, encargos: MisEncargos, carnet: CarnetCliente, historial: HistorialCliente, soporte: SoporteCliente },
+  vendedor: { pos: TerminalPOS, cobranza: CobranzaClientes, encargos: EncargosPanel, stock: StockRapido, catalogo: CatalogoPublico, clientes: ClientesAdmin, ventas: AuditoriaVentas, actividad: NotificacionesPanel, cuenta: PanelMiAcceso },
   admin: {
     pos: TerminalPOS,
     cobranza: CobranzaClientes,
@@ -91,7 +103,8 @@ const MODULOS = {
     vencimientos: VencimientosPanel,
     clientes: ClientesAdmin,
     ventas: AuditoriaVentas,
-    reportes: Dashboard,
+    notifs: NotificacionesPanel,
+    reportes: ReportesAdmin,
   },
 }
 
@@ -135,10 +148,17 @@ export default function App() {
     return () => window.removeEventListener('yapa:nav', onNav)
   }, [tabs])
 
+  // "Ingresar" desde el catálogo público (visitante → vista de login)
+  useEffect(() => {
+    const onLogin = () => setVista('login')
+    window.addEventListener('yapa:login', onLogin)
+    return () => window.removeEventListener('yapa:login', onLogin)
+  }, [])
+
   /* ---------- Vista pública: bienvenida + login directo ---------- */
   if (!session) {
     return (
-      <div className="flex min-h-screen flex-col overflow-x-hidden bg-white">
+      <div className="flex min-h-dvh flex-col overflow-x-hidden bg-white">
         {splashEl}
         <LandingHeader
           onContact={() => setContactoOpen(true)}
@@ -146,6 +166,7 @@ export default function App() {
           enCatalogo={vista === 'catalogo'}
           onLogin={() => setVista('login')}
         />
+        <CintaContingencia />
 
         <main className="flex-1">
           {vista === 'login' ? (
@@ -154,25 +175,9 @@ export default function App() {
               <LoginPanel />
             </section>
           ) : (
-            /* Catálogo público: vista dedicada con regreso al login */
-            <section className="fade-in mx-auto w-full max-w-7xl px-4 pb-16 pt-6">
-              <button
-                onClick={() => setVista('login')}
-                className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand"
-              >
-                <LogIn size={15} /> Volver al ingreso
-              </button>
-              <div className="mb-6 flex flex-col justify-between gap-3 rounded-2xl bg-gradient-to-r from-brand to-brand-dark p-6 text-white shadow-md sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="text-xl font-bold sm:text-2xl">Catálogo del kiosco</h2>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-blue-200">
-                    <Store size={14} /> {config.direccion}
-                  </p>
-                </div>
-                <Badge tone="white" className="w-fit">
-                  {config.abierto ? 'Abierto ahora' : 'Cerrado'}
-                </Badge>
-              </div>
+            /* Catálogo público: el header del landing ya ofrece "Ingresar",
+                así que el contenido sube sin banners ni duplicados. */
+            <section className="fade-in mx-auto w-full max-w-7xl px-4 pb-16">
               <CatalogoPublico />
             </section>
           )}
@@ -214,9 +219,10 @@ export default function App() {
   const Modulo = MODULOS[rol]?.[active]
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-white">
+    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-white">
       {splashEl}
       <TopBar onMenu={() => setNavOpen(true)} />
+      <CintaContingencia />
       <div className="mx-auto flex w-full max-w-[1440px] flex-1 gap-6 px-4 py-6">
         <RoleNav
           items={tabs}

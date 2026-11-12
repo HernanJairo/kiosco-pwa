@@ -1,20 +1,21 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import { buildSeed, CATEGORIAS } from './seedData'
-import { firebaseLista } from '../firebase/firebaseConfig'
+import { firebaseLista } from '../services/firebase'
 import * as fs from '../firebase/firestoreService'
 import * as ops from './operaciones'
 import { clientePorIdentificador } from '../utils/acceso'
+import { normalizarFotos } from '../utils/imagen'
 import { money } from '../utils/format'
 
 const DB_KEY = 'kiosco_db_v2'
 const SES_KEY = 'kiosco_session_v2'
 
-// ==== Persistencia remota (opcional, plug & play) ====
-// true → intenta sincronizar con Firestore cuando las credenciales de
-// firebaseConfig.js estén cargadas y el SDK instalado (npm i firebase).
-// false (por defecto, demo) → persiste solo en localStorage con seedData.
-const USE_FIREBASE = false
+// ==== Persistencia remota (Cloud Firestore, tiempo real) ====
+// true → sincroniza con el proyecto kiosko-45709 vía onSnapshot +
+// escrituras por documento (caché persistente nativa = modo offline).
+// false → persiste solo en localStorage con seedData (modo demo local).
+const USE_FIREBASE = true
 
 const sleep = (ms = 160) => new Promise((r) => setTimeout(r, ms))
 const clone = (o) => JSON.parse(JSON.stringify(o))
@@ -25,6 +26,13 @@ const KioscoContext = createContext(null)
 export const useKiosco = () => useContext(KioscoContext)
 
 const ROLES_VALIDOS = ['cliente', 'vendedor', 'admin']
+
+// Migración fotos[]: los productos viejos con `foto` única quedan con
+// `fotos` normalizado y `foto` apuntando a la principal (retrocompat).
+const normalizarDb = (d) => {
+  if (Array.isArray(d?.productos)) d.productos = d.productos.map(normalizarFotos)
+  return d
+}
 
 function loadDB() {
   try {
@@ -56,12 +64,12 @@ function loadDB() {
       if (!Array.isArray(parsed.notificaciones)) parsed.notificaciones = []
       if (!Array.isArray(parsed.encargos)) parsed.encargos = []
       if (!Array.isArray(parsed.auditoria)) parsed.auditoria = []
-      return parsed
+      return normalizarDb(parsed)
     }
   } catch {
     /* datos corruptos: se regenera el seed */
   }
-  return buildSeed()
+  return normalizarDb(buildSeed())
 }
 function loadSession() {
   try {
@@ -82,29 +90,53 @@ export function KioscoProvider({ children }) {
     localStorage.setItem(DB_KEY, JSON.stringify(db))
   }, [db])
 
-  // Arranque remoto: si Firebase está habilitado y configurado, hidrata
-  // productos y clientes desde Firestore. Ante cualquier fallo queda el
-  // contenido local intacto (fallback seguro para la demo).
+  // Cola de notificaciones creadas localmente pendientes de subir a
+  // Firestore (avisar las encola; el efecto de abajo las descarga).
+  const colaNotifs = useRef([])
+
+  // Sincronización en tiempo real con Firestore: cada colección vive en
+  // una suscripción onSnapshot, así los cambios de otros dispositivos
+  // (caja, admin, celular del cliente) aparecen sin recargar. Si la base
+  // remota está vacía se siembra una única vez con el catálogo demo
+  // (meta/semilla lo recuerda). Ante cualquier fallo queda el modo
+  // local intacto como respaldo.
   useEffect(() => {
     if (!USE_FIREBASE || !firebaseLista) return
     let activo = true
+    const offs = []
     ;(async () => {
       try {
-        const [productos, clientes] = await Promise.all([fs.getProductos(), fs.getClientes()])
-        if (!activo || (!productos && !clientes)) return
-        setRemoto(true)
-        setDb((prev) => {
-          const n = clone(prev)
-          if (productos?.length) n.productos = productos
-          if (clientes?.length) n.clientes = clientes
-          return n
-        })
+        const sembrada = await fs.semillaSiVacio(buildSeed())
+        if (sembrada) console.info('[firebase] Base inicializada con el catálogo demo.')
       } catch (e) {
-        console.warn('[firebase] Sin conexión remota, sigo en modo local.', e)
+        console.warn('[firebase] No se pudo verificar la semilla remota.', e)
       }
+      if (!activo) return
+      setRemoto(true)
+      for (const col of fs.COLECCIONES_SUSCRIPTAS) {
+        offs.push(
+          fs.suscribir(col, (docs) => {
+            setDb((prev) => {
+              const n = clone(prev)
+              n[col] = col === 'productos' ? docs.map(normalizarFotos) : docs
+              return n
+            })
+          })
+        )
+      }
+      offs.push(
+        fs.suscribirConfig((data) => {
+          setDb((prev) => {
+            const n = clone(prev)
+            n.config = { ...buildSeed().config, ...(data || {}) }
+            return n
+          })
+        })
+      )
     })()
     return () => {
       activo = false
+      offs.forEach((off) => off())
     }
   }, [])
 
@@ -112,6 +144,16 @@ export function KioscoProvider({ children }) {
   const sync = (p) => {
     if (remoto) Promise.resolve(p).catch((e) => console.warn('[firebase] sync:', e))
   }
+
+  // Descarga en Firestore las notificaciones creadas localmente (avisar
+  // las encola en colaNotifs; las que llegan por onSnapshot no se
+  // reescriben).
+  useEffect(() => {
+    if (!remoto || !colaNotifs.current.length) return
+    const pendientes = colaNotifs.current.splice(0)
+    for (const notif of pendientes) sync(fs.upsertNotificacion(notif))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [db.notificaciones, remoto])
   useEffect(() => {
     if (session) localStorage.setItem(SES_KEY, JSON.stringify(session))
     else localStorage.removeItem(SES_KEY)
@@ -126,11 +168,15 @@ export function KioscoProvider({ children }) {
   const mutate = (fn) => setDb((prev) => { const n = clone(prev); fn(n); return n })
 
   // Registra un evento en el centro de notificaciones (campanita del
-  // TopBar). `para` es 'staff' o 'cliente:<id>'; el feed se filtra según
-  // la sesión activa.
-  const avisar = (n, para, texto, tipo = 'info') => {
+  // TopBar + panel de Actividad). `para` es 'staff', 'admin' o
+  // 'cliente:<id>'; `cat` agrupa el feed del admin ('ventas', 'pedidos',
+  // 'stock', 'clientes', 'caja'); `autor` deja firmada la acción para la
+  // auditoría de sesión del vendedor.
+  const avisar = (n, para, texto, tipo = 'info', cat = null, autor = null) => {
     if (!Array.isArray(n.notificaciones)) n.notificaciones = []
-    n.notificaciones.unshift({ id: uid(), fecha: new Date().toISOString(), para, texto, tipo })
+    const notif = { id: uid(), fecha: new Date().toISOString(), para, texto, tipo, cat, autor }
+    n.notificaciones.unshift(notif)
+    colaNotifs.current.push(notif)
     if (n.notificaciones.length > 200) n.notificaciones.length = 200
   }
 
@@ -168,7 +214,7 @@ export function KioscoProvider({ children }) {
   /* ================= PRODUCTOS ================= */
   const addProducto = async (data) => {
     await sleep()
-    const p = { id: uid(), stockMin: 0, vencimiento: null, ...data }
+    const p = normalizarFotos({ id: uid(), stockMin: 0, vencimiento: null, ...data })
     mutate((n) => n.productos.push(p))
     sync(fs.upsertProducto(p))
     return p
@@ -178,10 +224,10 @@ export function KioscoProvider({ children }) {
     await sleep(90)
     mutate((n) => {
       const p = n.productos.find((x) => x.id === id)
-      if (p) Object.assign(p, patch)
+      if (p) Object.assign(p, normalizarFotos({ ...p, ...patch }))
     })
     const p = db.productos.find((x) => x.id === id)
-    if (p) sync(fs.upsertProducto({ ...p, ...patch }))
+    if (p) sync(fs.upsertProducto(normalizarFotos({ ...p, ...patch })))
   }
 
   const deleteProducto = async (id) => {
@@ -189,6 +235,33 @@ export function KioscoProvider({ children }) {
     mutate((n) => {
       n.productos = n.productos.filter((x) => x.id !== id)
     })
+    sync(fs.borrarProducto(id))
+  }
+
+  // Stock Rápido: ajuste manual de unidades en mostrador (+N / −N).
+  // Además de persistir, deja el movimiento firmado por el operador para
+  // el feed del admin y la auditoría de sesión del vendedor.
+  const ajustarStock = async (productoId, stockNuevo) => {
+    await sleep(60)
+    const antes = db.productos.find((x) => x.id === productoId)
+    if (!antes) throw new Error('Producto no encontrado.')
+    const nuevo = Math.max(0, Number(stockNuevo) || 0)
+    const delta = nuevo - antes.stock
+    mutate((n) => {
+      const p = n.productos.find((x) => x.id === productoId)
+      if (p) p.stock = nuevo
+      avisar(
+        n,
+        'staff',
+        nuevo === 0
+          ? `Sin stock: ${antes.nombre} quedó agotado en mostrador.`
+          : `Stock ${delta > 0 ? `+${delta}` : delta} · ${antes.nombre} · queda en ${nuevo} u.`,
+        nuevo === 0 ? 'stock' : 'info',
+        'stock',
+        session?.nombre || 'mostrador'
+      )
+    })
+    sync(fs.updateStock(productoId, nuevo))
   }
 
   /* ================= VENTAS / POS ================= */
@@ -217,8 +290,25 @@ export function KioscoProvider({ children }) {
       retiradoPor: retiradoPor || null,
     }
 
+    let productosSync = []
+    let clienteSync = null
     mutate((n) => {
       ops.aplicarVentaDb(n, { venta, detalle, metodo, clienteId: cliente?.id, descontarStock: !reservado })
+      // Documentos mutados que viajan a Firestore (stock descontado y
+      // saldo/fiado/movimientos del cliente).
+      productosSync = detalle
+        .map((d) => n.productos.find((x) => x.id === d.productoId))
+        .filter(Boolean)
+      if (cliente) clienteSync = n.clientes.find((x) => x.id === cliente.id) || null
+      // Feed del admin: cada venta queda asentada con su autor de turno.
+      avisar(
+        n,
+        'staff',
+        `Venta ${enEspera ? 'en espera ' : ''}· ${money(total)} · ${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)${cliente ? ` · ${venta.clienteNombre}` : ''}.`,
+        'venta',
+        'ventas',
+        vendedor
+      )
       if (cliente && metodo === 'fiado') {
         const c = n.clientes.find((x) => x.id === cliente.id)
         avisarCliente(
@@ -228,12 +318,39 @@ export function KioscoProvider({ children }) {
           'consumo'
         )
       }
+      // Regla antifraude: tras cada compra concreta se evalúa el
+      // desbloqueo automático de la Cuenta Corriente (una sola vez).
+      if (cliente && !enEspera) {
+        const des = ops.desbloquearFiadoDb(n, cliente.id)
+        if (des) {
+          avisarCliente(
+            n,
+            des.cliente,
+            `¡Buenas noticias! Ya tenés la Cuenta Corriente habilitada con un límite de ${money(des.limite)}.`,
+            'acreditada'
+          )
+          avisar(
+            n,
+            'admin',
+            `Cta. Corriente desbloqueada automáticamente para ${des.cliente.nombre} ${des.cliente.apellido} · límite inicial ${money(des.limite)}.`,
+            'acreditada',
+            'clientes',
+            'regla automática'
+          )
+          avisar(
+            n,
+            'staff',
+            `Cta. Corriente desbloqueada para ${des.cliente.nombre} ${des.cliente.apellido} (cumplió compras y monto mínimos).`,
+            'acreditada',
+            'clientes',
+            'regla automática'
+          )
+        }
+      }
     })
     sync(fs.registrarVenta(venta))
-    for (const it of detalle) {
-      const p = db.productos.find((x) => x.id === it.productoId)
-      if (p) sync(fs.updateStock(it.productoId, Math.max(0, p.stock - it.cantidad)))
-    }
+    if (!reservado) for (const p of productosSync) sync(fs.upsertProducto(p))
+    if (clienteSync) sync(fs.updateCliente(clienteSync.id, clienteSync))
     return venta
   }
 
@@ -258,12 +375,19 @@ export function KioscoProvider({ children }) {
     await sleep()
     const venta = db.ventas.find((v) => v.id === ventaId)
     if (!venta) throw new Error('Venta no encontrada.')
-    mutate((n) => ops.anularVentaDb(n, ventaId))
+    let productosSync = []
+    let clienteSync = null
+    mutate((n) => {
+      ops.anularVentaDb(n, ventaId)
+      // Stock restaurado y posible reversa de saldo/fiado del cliente.
+      productosSync = venta.items
+        .map((i) => n.productos.find((x) => x.id === i.productoId))
+        .filter(Boolean)
+      if (venta.clienteId) clienteSync = n.clientes.find((x) => x.id === venta.clienteId) || null
+    })
     sync(fs.registrarVenta({ ...venta, anulada: true }))
-    for (const it of venta.items) {
-      const p = db.productos.find((x) => x.id === it.productoId)
-      if (p) sync(fs.updateStock(it.productoId, p.stock + it.cantidad))
-    }
+    for (const p of productosSync) sync(fs.upsertProducto(p))
+    if (clienteSync) sync(fs.updateCliente(clienteSync.id, clienteSync))
   }
 
   /* ================= CLIENTES ================= */
@@ -278,6 +402,16 @@ export function KioscoProvider({ children }) {
       // Revalida sobre el borrador por si otro alta corrió en paralelo.
       ops.validarAltaCliente(n.clientes, datos)
       n.clientes.push(cliente)
+      // El alta queda firmada por quien la registró (mostrador o
+      // auto-registro público) para la auditoría de actividad.
+      avisar(
+        n,
+        'staff',
+        `Nuevo cliente: ${cliente.nombre} ${cliente.apellido} · DNI ${cliente.dni}.`,
+        'info',
+        'clientes',
+        session?.nombre || 'registro público'
+      )
     })
     sync(fs.updateCliente(cliente.id, cliente))
     return { cliente }
@@ -288,6 +422,7 @@ export function KioscoProvider({ children }) {
     await sleep()
     const eliminado = ops.eliminarClienteDb(clone(db), clienteId) // valida antes de mutar
     mutate((n) => ops.eliminarClienteDb(n, clienteId))
+    sync(fs.borrarCliente(clienteId))
     return eliminado
   }
 
@@ -310,6 +445,7 @@ export function KioscoProvider({ children }) {
     if (!/^\d{4}$/.test(String(pin))) throw new Error('El PIN temporal debe tener 4 dígitos.')
     const c = db.clientes.find((x) => x.id === clienteId)
     if (!c) throw new Error('Cliente no encontrado.')
+    let clienteSync = null
     mutate((n) => {
       const x = n.clientes.find((i) => i.id === clienteId)
       if (!x) return
@@ -322,8 +458,9 @@ export function KioscoProvider({ children }) {
         monto: 0,
       })
       avisarCliente(n, x, `Tu PIN fue restablecido por el kiosco. Clave temporal: ${pin}.`, 'seguridad')
+      clienteSync = x
     })
-    sync(fs.updateCliente(clienteId, { pin }))
+    if (clienteSync) sync(fs.updateCliente(clienteId, clienteSync))
     return pin
   }
 
@@ -341,17 +478,17 @@ export function KioscoProvider({ children }) {
     if (!cliente) throw new Error('Cliente no encontrado.')
 
     const detalle = origen === 'acreditacion' ? 'Transferencia acreditada' : 'Registrado en kiosco'
+    let clienteSync = null
     mutate((n) => {
       const { cliente: c } = ops.aplicarPagoDb(n, clienteId, monto, detalle)
+      clienteSync = c
       if (origen === 'kiosco') {
         avisarCliente(n, c, `Pago de ${money(monto)} registrado en el kiosco.`, 'acreditada')
+        avisar(n, 'staff', `Pago de deuda · ${money(monto)} · ${c.nombre} ${c.apellido}.`, 'acreditada', 'clientes', session?.nombre || 'mostrador')
       }
     })
-    const prev = clone(db).clientes.find((x) => x.id === clienteId)
-    if (prev) {
-      ops.abonarFiados(prev, monto)
-      sync(fs.updateSaldo(clienteId, { saldo: prev.saldo, deuda: prev.deuda }))
-    }
+    // El doc del cliente lleva saldo, fiados y movimientos juntos.
+    if (clienteSync) sync(fs.updateCliente(clienteId, clienteSync))
   }
 
   const recargarSaldo = async (clienteId, monto, origen = 'kiosco') => {
@@ -361,17 +498,16 @@ export function KioscoProvider({ children }) {
     const cliente = db.clientes.find((c) => c.id === clienteId)
     if (!cliente) throw new Error('Cliente no encontrado.')
     const detalle = origen === 'acreditacion' ? 'Transferencia acreditada' : 'Kiosco'
+    let clienteSync = null
     mutate((n) => {
       const { cliente: c } = ops.aplicarRecargaDb(n, clienteId, monto, detalle)
+      clienteSync = c
       if (origen === 'kiosco') {
         avisarCliente(n, c, `Recarga de ${money(monto)} acreditada en tu billetera.`, 'acreditada')
+        avisar(n, 'staff', `Recarga de saldo · ${money(monto)} · ${c.nombre} ${c.apellido}.`, 'acreditada', 'clientes', session?.nombre || 'mostrador')
       }
     })
-    const prev = clone(db).clientes.find((x) => x.id === clienteId)
-    if (prev) {
-      ops.abonarFiados(prev, monto)
-      sync(fs.updateSaldo(clienteId, { saldo: prev.saldo, deuda: prev.deuda }))
-    }
+    if (clienteSync) sync(fs.updateCliente(clienteId, clienteSync))
   }
 
   /* ================= SOLICITUDES ================= */
@@ -426,11 +562,9 @@ export function KioscoProvider({ children }) {
     })
     if (resultado?.solicitud) {
       sync(fs.upsertSolicitud(resultado.solicitud))
-      if (resultado.solicitud.tipo === 'RESET_PIN') {
-        sync(fs.updateCliente(resultado.cliente.id, { pin: resultado.cliente.pin }))
-      } else {
-        sync(fs.updateSaldo(resultado.cliente.id, { saldo: resultado.cliente.saldo, deuda: resultado.cliente.deuda }))
-      }
+      // El cliente muta en ambos caminos (PIN temporal o saldo/fiados):
+      // se sube el documento completo para no perder movimientos.
+      sync(fs.updateCliente(resultado.cliente.id, resultado.cliente))
     }
     return resultado
   }
@@ -466,6 +600,7 @@ export function KioscoProvider({ children }) {
       ops.validarAltaPersonal(n.personal, datos) // revalida sobre el borrador
       n.personal.push(u)
     })
+    sync(fs.upsertPersonal(u))
     return u
   }
 
@@ -481,6 +616,7 @@ export function KioscoProvider({ children }) {
     if (session?.id === id && session?.rol !== 'cliente' && actualizado) {
       setSession((s) => ({ ...s, nombre: `${actualizado.nombre} ${actualizado.apellido}`.trim(), rol: actualizado.rol }))
     }
+    if (actualizado) sync(fs.upsertPersonal(actualizado))
     return actualizado
   }
 
@@ -488,12 +624,17 @@ export function KioscoProvider({ children }) {
     await sleep()
     ops.eliminarPersonalDb(clone(db), id) // valida antes de mutar (último admin)
     mutate((n) => ops.eliminarPersonalDb(n, id))
+    sync(fs.borrarPersonal(id))
   }
 
   // Cambio de PIN propio desde "Mi Perfil": exige el PIN vigente.
   const cambiarPinPersonal = async (id, pinActual, pinNuevo) => {
     await sleep(90)
-    mutate((n) => ops.cambiarPinPersonalDb(n, id, pinActual, pinNuevo))
+    let actualizado = null
+    mutate((n) => {
+      actualizado = ops.cambiarPinPersonalDb(n, id, pinActual, pinNuevo)
+    })
+    if (actualizado) sync(fs.upsertPersonal(actualizado))
   }
 
   /* ================= ENCARGOS (retiro en local) =================
@@ -503,17 +644,30 @@ export function KioscoProvider({ children }) {
   const enviarEncargo = async (items, retiroTercero = null) => {
     await sleep(120)
     if (!clienteSesion) throw new Error('Tenés que iniciar sesión para encargar.')
-    if (!config.recibiendoEncargos) throw new Error('El kiosco no está recibiendo encargos ahora.')
+    if (!config.recibiendoEncargos || config.encargosActivos === false) {
+      throw new Error('Los encargos están pausados temporalmente.')
+    }
     let creado = null
+    let productosSync = []
     mutate((n) => {
       creado = ops.nuevoEncargo(n, { clienteId: clienteSesion.id, items, retiroTercero })
+      // El encargo reserva stock: los productos descontados también viajan.
+      productosSync = creado.items
+        .map((i) => n.productos.find((x) => x.id === i.productoId))
+        .filter(Boolean)
       avisar(
         n,
         'staff',
         `Nuevo encargo de ${creado.clienteNombre} · ${creado.items.reduce((s, i) => s + i.cantidad, 0)} ítem(s) · ${money(creado.total)}.`,
-        'encargo'
+        'encargo',
+        'pedidos',
+        creado.clienteNombre
       )
     })
+    if (creado) {
+      sync(fs.upsertEncargo(creado))
+      for (const p of productosSync) sync(fs.upsertProducto(p))
+    }
     return creado
   }
 
@@ -522,9 +676,25 @@ export function KioscoProvider({ children }) {
   const ajustarItemEncargo = async (encargoId, productoId, cantidadQuitar) => {
     await sleep(60)
     let e = null
+    let productoSync = null
     mutate((n) => {
       e = ops.ajustarItemEncargoDb(n, encargoId, productoId, cantidadQuitar, { ajustadoPor: session?.nombre })
+      productoSync = n.productos.find((x) => x.id === productoId) || null
+      const item = (e.itemsFaltantes || []).find((f) => f.productoId === productoId)
+      avisar(
+        n,
+        'staff',
+        `Encargo #${e.id.slice(0, 8).toUpperCase()} ajustado por faltante · −${cantidadQuitar}× ${item?.nombre || 'ítem'} (${e.clienteNombre}).`,
+        'encargo',
+        'pedidos',
+        session?.nombre || 'mostrador'
+      )
     })
+    if (e) {
+      sync(fs.upsertEncargo(e))
+      // El faltante devuelve la reserva a la góndola.
+      if (productoSync) sync(fs.upsertProducto(productoSync))
+    }
     return e
   }
 
@@ -534,6 +704,7 @@ export function KioscoProvider({ children }) {
     mutate((n) => {
       e = ops.guardarTerceroEncargoDb(n, encargoId, datos)
     })
+    if (e) sync(fs.upsertEncargo(e))
     return e
   }
 
@@ -542,6 +713,14 @@ export function KioscoProvider({ children }) {
     let e = null
     mutate((n) => {
       e = ops.marcarEncargoListoDb(n, encargoId, { preparadoPor: session?.nombre || 'mostrador' })
+      avisar(
+        n,
+        'staff',
+        `Encargo #${e.id.slice(0, 8).toUpperCase()} listo para retirar · ${e.clienteNombre} · ${money(e.total)}.`,
+        'encargo',
+        'pedidos',
+        session?.nombre || 'mostrador'
+      )
       const cliente = n.clientes.find((c) => c.id === e.clienteId)
       if (cliente) {
         const falt = (e.itemsFaltantes || []).map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')
@@ -554,6 +733,7 @@ export function KioscoProvider({ children }) {
         )
       }
     })
+    if (e) sync(fs.upsertEncargo(e))
     return e
   }
 
@@ -563,6 +743,14 @@ export function KioscoProvider({ children }) {
     let e = null
     mutate((n) => {
       e = ops.entregarEncargoDb(n, encargoId, { retiradoPor })
+      avisar(
+        n,
+        'staff',
+        `Encargo #${e.id.slice(0, 8).toUpperCase()} entregado · retiró ${e.retiradoPor}.`,
+        'encargo',
+        'pedidos',
+        session?.nombre || 'mostrador'
+      )
       const cliente = n.clientes.find((c) => c.id === e.clienteId)
       if (cliente) {
         avisarCliente(
@@ -573,14 +761,28 @@ export function KioscoProvider({ children }) {
         )
       }
     })
+    if (e) sync(fs.upsertEncargo(e))
     return e
   }
 
   const cancelarEncargo = async (encargoId) => {
     await sleep(60)
     let e = null
+    let productosSync = []
     mutate((n) => {
       e = ops.cancelarEncargoDb(n, encargoId)
+      // La mercadería reservada vuelve a la góndola.
+      productosSync = e.items
+        .map((i) => n.productos.find((x) => x.id === i.productoId))
+        .filter(Boolean)
+      avisar(
+        n,
+        'staff',
+        `Encargo #${e.id.slice(0, 8).toUpperCase()} cancelado (${e.clienteNombre}) · mercadería devuelta a stock.`,
+        'encargo',
+        'pedidos',
+        session?.nombre || 'mostrador'
+      )
       const cliente = n.clientes.find((c) => c.id === e.clienteId)
       if (cliente) {
         avisarCliente(
@@ -591,6 +793,10 @@ export function KioscoProvider({ children }) {
         )
       }
     })
+    if (e) {
+      sync(fs.upsertEncargo(e))
+      for (const p of productosSync) sync(fs.upsertProducto(p))
+    }
     return e
   }
 
@@ -603,6 +809,8 @@ export function KioscoProvider({ children }) {
     const auditables = [
       ['abierto', 'Local abierto', 'Local cerrado'],
       ['recibiendoEncargos', 'Encargos habilitados', 'Encargos pausados'],
+      ['fiadosActivos', 'Fiados habilitados', 'Fiados pausados'],
+      ['encargosActivos', 'Pedidos de encargo habilitados', 'Pedidos de encargo pausados'],
     ]
     mutate((n) => {
       Object.assign(n.config, patch)
@@ -616,12 +824,13 @@ export function KioscoProvider({ children }) {
           detalle: `${texto} · ${n.config.nombreKiosco}`,
         })
         // La administración y el mostrador se enteran por la campanita.
-        avisar(n, 'admin', `${texto}: ${session?.nombre || 'mostrador'} (${session?.rol || '?'}) lo cambió.`, 'auditoria')
-        avisar(n, 'staff', `${texto} — por ${session?.nombre || 'mostrador'}.`, 'auditoria')
+        avisar(n, 'admin', `${texto}: ${session?.nombre || 'mostrador'} (${session?.rol || '?'}) lo cambió.`, 'auditoria', 'caja', session?.nombre || 'mostrador')
+        avisar(n, 'staff', `${texto} — por ${session?.nombre || 'mostrador'}.`, 'auditoria', 'caja', session?.nombre || 'mostrador')
       }
       // Apertura de caja: el mostrador se entera por la campanita.
-      if (abre) avisar(n, 'staff', 'Apertura de caja: el kiosco habilitó el mostrador.', 'apertura')
+      if (abre) avisar(n, 'staff', 'Apertura de caja: el kiosco habilitó el mostrador.', 'apertura', 'caja', session?.nombre || 'mostrador')
     })
+    sync(fs.updateConfigDoc(patch))
   }
 
   const resetDemo = async () => {
@@ -663,6 +872,7 @@ export function KioscoProvider({ children }) {
     addProducto,
     updateProducto,
     deleteProducto,
+    ajustarStock,
     registrarVenta,
     aprobarCobroEspera,
     anularVenta,

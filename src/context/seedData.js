@@ -33,7 +33,17 @@ export function buildSeed() {
       aliasPago: 'KIOSCO.LOSPINOS.MP',
       cbuPago: '0000003100012345678901',
       limiteFiadoGlobal: 10000,
+      // Regla antifraude del fiado: el cliente desbloquea su Cuenta
+      // Corriente al juntar comprasMinimasParaFiado compras Y
+      // montoMinimoParaFiado acumulado; el admin puede ajustarlos.
+      comprasMinimasParaFiado: 10,
+      montoMinimoParaFiado: 20000,
+      limiteFiadoInicialDesbloqueado: 10000,
       abierto: true,
+      // Interruptores de contingencia operativa: el staff puede pausar
+      // fiados o encargos sin cerrar el local (todo queda auditado).
+      fiadosActivos: true,
+      encargosActivos: true,
       recibiendoEncargos: true,
     },
 

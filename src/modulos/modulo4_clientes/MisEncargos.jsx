@@ -1,24 +1,58 @@
 import { useMemo, useState } from 'react'
-import { PackageCheck, QrCode, Store, UserCheck } from 'lucide-react'
+import { BadgeCheck, Check, Clock3, PackageCheck, QrCode, Store } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { fmtFechaHora, money } from '../../utils/format'
-import Badge from '../../components/ui/Badge'
-import Button from '../../components/ui/Button'
-import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import PedidoQRModal from './PedidoQRModal'
+import './BilleteraCliente.css'
 
 const ESTADO = {
-  en_preparacion: { tone: 'amber', label: 'En preparación' },
-  listo_retiro: { tone: 'emerald', label: 'Listo para retirar' },
-  entregado: { tone: 'slate', label: 'Entregado' },
-  cancelado: { tone: 'rose', label: 'Cancelado' },
+  en_preparacion: 'En preparación',
+  listo_retiro: 'Listo para retirar',
+  entregado: 'Retirado',
+  cancelado: 'Cancelado',
 }
 
-// "Mis Encargos" del cliente: historial de pedidos anticipados con su
-// estado, ítems, faltantes descontados y —para los que están listos—
-// selección múltiple para generar UN QR de retiro que cobra varios
-// pedidos juntos en caja.
+// Paso del stepper según el estado del encargo:
+//   Recibido → Preparando → Listo para retirar
+// El CSS de v0 solo trae el look "done" (verde); los pasos actual y
+// pendiente se pintan inline para no tocar la hoja extraída.
+function PasoOrden({ estado }) {
+  // índice del paso vigente: en_preparacion=1, listo/entregado=3 (todo hecho)
+  const actual = estado === 'en_preparacion' ? 1 : estado === 'cancelado' ? 0 : 3
+  const labels = ['Recibido', 'Preparando', 'Listo para retirar']
+  return (
+    <div className="order-progress" aria-label={`Estado del encargo: ${ESTADO[estado] || estado}`}>
+      {labels.map((label, i) => {
+        const hecho = i < actual || actual === 3
+        const enCurso = i === actual
+        const circulo = hecho
+          ? undefined
+          : enCurso
+            ? { background: '#009de0', borderColor: '#009de0', color: '#fff' }
+            : { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#9ca3af' }
+        return (
+          <div key={label} style={{ display: 'contents' }}>
+            {i > 0 && (
+              <i
+                className="progress-line"
+                style={i <= actual || actual === 3 ? undefined : { background: '#e5e7eb' }}
+              />
+            )}
+            <div className="progress-step">
+              <span style={circulo}>{hecho ? <Check size={15} /> : <Clock3 size={13} />}</span>
+              <strong>{label}</strong>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// "Mis Encargos" del cliente con la estética v0 (orders-panel /
+// order-detail-card): pedido activo con stepper y QR de retiro real,
+// selección múltiple para UN QR combinado e historial de anteriores.
 export default function MisEncargos() {
   const { clienteSesion, encargos } = useKiosco()
   const [seleccion, setSeleccion] = useState([]) // ids de encargos listos marcados
@@ -28,6 +62,8 @@ export default function MisEncargos() {
     () => (encargos || []).filter((e) => e.clienteId === clienteSesion?.id),
     [encargos, clienteSesion]
   )
+  const activos = mios.filter((e) => e.estado === 'en_preparacion' || e.estado === 'listo_retiro')
+  const anteriores = mios.filter((e) => e.estado === 'entregado' || e.estado === 'cancelado')
   const listosParaRetiro = mios.filter((e) => e.estado === 'listo_retiro')
   const elegidos = listosParaRetiro.filter((e) => seleccion.includes(e.id))
   const totalElegido = elegidos.reduce((s, e) => s + e.total, 0)
@@ -35,96 +71,149 @@ export default function MisEncargos() {
   const toggle = (id) =>
     setSeleccion((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]))
 
-  const irCatalogo = () => window.dispatchEvent(new CustomEvent('yapa:nav', { detail: 'catalogo' }))
+  const irTab = (key) => window.dispatchEvent(new CustomEvent('yapa:nav', { detail: key }))
 
   return (
-    <div className="flex flex-col gap-4">
-      <Card title="Mis Encargos" subtitle="Pedidos anticipados para retirar en el local">
-        {mios.length === 0 ? (
-          <EmptyState
-            icon={PackageCheck}
-            title="Todavía no tenés encargos"
-            sub="Armá tu pedido desde el catálogo y elegí 'Retirar pedido en local'."
-          >
-            <Button onClick={irCatalogo} className="mt-2">
-              <Store size={15} /> Ir al catálogo
-            </Button>
-          </EmptyState>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {mios.map((e) => {
-              const est = ESTADO[e.estado] || ESTADO.en_preparacion
-              const seleccionable = e.estado === 'listo_retiro'
-              const marcado = seleccion.includes(e.id)
-              return (
-                <li
-                  key={e.id}
-                  className={`overflow-hidden rounded-3xl bg-white shadow-soft transition-all duration-200 ${marcado ? 'ring-2 ring-[#009DE0]' : ''}`}
-                >
-                  <div className="flex items-center gap-3 bg-[#F6F6F6] px-4 py-3">
-                    {/* Checkbox de selección para el QR combinado */}
-                    {seleccionable ? (
+    <div className="wallet-app">
+      <div className="wallet-shell">
+        <section className="orders-panel" role="tabpanel" aria-label="Mis Encargos">
+          <div className="wallet-section-heading orders-heading">
+            <div>
+              <p className="wallet-eyebrow">RETIRO EN EL LOCAL</p>
+              <h2>Tus encargos</h2>
+              <p>Pedidos anticipados que preparamos con cariño.</p>
+            </div>
+            <span className="order-count-badge">
+              {activos.length === 0 ? 'Sin activos' : `${activos.length} activo${activos.length > 1 ? 's' : ''}`}
+            </span>
+          </div>
+
+          {mios.length === 0 ? (
+            <EmptyState
+              icon={PackageCheck}
+              title="Todavía no tenés encargos"
+              sub="Armá tu pedido desde el catálogo y elegí 'Retirar pedido en local'."
+            >
+              <button type="button" className="wallet-primary-button modal-submit" onClick={() => irTab('catalogo')}>
+                <Store size={17} /> Ir al catálogo
+              </button>
+            </EmptyState>
+          ) : (
+            <>
+              {/* Pedidos activos: tarjeta de detalle v0 con stepper */}
+              {activos.map((e) => {
+                const seleccionable = e.estado === 'listo_retiro'
+                const marcado = seleccion.includes(e.id)
+                return (
+                  <article className="order-detail-card" key={e.id} style={marcado ? { outline: '2px solid #009de0' } : undefined}>
+                    <div className="order-detail-top">
+                      <div>
+                        <span className="order-number">ENCARGO ACTIVO <strong>#{e.id.slice(0, 8).toUpperCase()}</strong></span>
+                        <h3>{e.estado === 'listo_retiro' ? '¡Ya podés pasar a buscarlo!' : 'Lo estamos preparando'}</h3>
+                        <p>{fmtFechaHora(e.fecha)}{e.preparadoPor ? ` · Armó ${e.preparadoPor}` : ''}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {seleccionable && listosParaRetiro.length > 0 && (
+                          <button
+                            type="button"
+                            role="checkbox"
+                            aria-checked={marcado}
+                            aria-label={`Seleccionar pedido ${e.id.slice(0, 8).toUpperCase()} para cobrar junto`}
+                            onClick={() => toggle(e.id)}
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 text-sm font-bold text-white transition-all duration-150 active:scale-90 ${
+                              marcado ? 'border-[#009DE0] bg-[#009DE0]' : 'border-slate-300 bg-white text-transparent'
+                            }`}
+                          >
+                            ✓
+                          </button>
+                        )}
+                        <span className="ready-indicator" style={e.estado === 'en_preparacion' ? { background: '#fef3c7', color: '#b45309' } : undefined}>
+                          {e.estado === 'listo_retiro' ? <Check size={14} /> : <Clock3 size={14} />}
+                          {ESTADO[e.estado]}
+                        </span>
+                      </div>
+                    </div>
+
+                    <PasoOrden estado={e.estado} />
+
+                    <div className="order-detail-content">
+                      <div className="order-detail-products">
+                        <h4>Tu pedido</h4>
+                        {e.items.map((i) => (
+                          <div key={i.productoId}>
+                            <span>{i.cantidad} × {i.nombre}</span>
+                            <strong>{money(i.precio * i.cantidad)}</strong>
+                          </div>
+                        ))}
+                        <div className="order-total-line"><span>Total</span><strong>{money(e.total)}</strong></div>
+                      </div>
+                      <div className="pickup-person">
+                        <span className="pickup-person-icon"><BadgeCheck size={19} /></span>
+                        <div>
+                          <small>PERSONA AUTORIZADA</small>
+                          <strong>{e.retiroTercero?.dni ? `Retira: ${e.retiroTercero.nombre}` : 'Retira: Titular'}</strong>
+                          <span>{e.retiroTercero?.dni ? `DNI ${e.retiroTercero.dni}` : `${clienteSesion.nombre} ${clienteSesion.apellido} · DNI ${clienteSesion.dni}`}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {(e.itemsFaltantes || []).length > 0 && (
+                      <p className="mx-1 mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700">
+                        Sin stock en góndola se descontó: {e.itemsFaltantes.map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')}.
+                      </p>
+                    )}
+
+                    {e.estado === 'listo_retiro' && (
                       <button
                         type="button"
-                        role="checkbox"
-                        aria-checked={marcado}
-                        aria-label={`Seleccionar pedido ${e.id.slice(0, 8).toUpperCase()} para cobrar`}
-                        onClick={() => toggle(e.id)}
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 text-sm font-bold text-white transition-all duration-150 active:scale-90 ${
-                          marcado ? 'border-[#009DE0] bg-[#009DE0]' : 'border-slate-300 bg-white text-transparent'
-                        }`}
+                        className="wallet-primary-button show-pickup-qr"
+                        onClick={() => { setSeleccion([e.id]); setQrOpen(true) }}
                       >
-                        ✓
+                        <QrCode size={18} />Mostrar QR de retiro en caja
                       </button>
-                    ) : (
-                      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${e.estado === 'en_preparacion' ? 'animate-pulse bg-amber-400' : e.estado === 'entregado' ? 'bg-slate-300' : 'bg-rose-300'}`} />
                     )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold leading-tight text-slate-800">
-                        Pedido #{e.id.slice(0, 8).toUpperCase()} · {money(e.total)}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        {fmtFechaHora(e.fecha)}
-                        {e.preparadoPor ? ` · Armó ${e.preparadoPor}` : ''}
-                      </p>
+                  </article>
+                )
+              })}
+
+              {/* Encargos anteriores: filas compactas del historial v0 */}
+              {anteriores.length > 0 && (
+                <section className="order-history">
+                  <div className="wallet-section-heading">
+                    <div>
+                      <p className="wallet-eyebrow">PARA RECORDAR</p>
+                      <h2>Encargos anteriores</h2>
                     </div>
-                    <Badge tone={est.tone} className="shrink-0">{est.label}</Badge>
+                    <button type="button" className="link-button" onClick={() => irTab('historial')}>
+                      Ver historial
+                    </button>
                   </div>
-
-                  <ul className="flex flex-col gap-1 px-4 py-3">
-                    {e.items.map((i) => (
-                      <li key={i.productoId} className="flex justify-between gap-3 text-sm">
-                        <span className="truncate text-slate-600">{i.cantidad}× {i.nombre}</span>
-                        <span className="shrink-0 font-medium text-slate-700">{money(i.precio * i.cantidad)}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {(e.itemsFaltantes || []).length > 0 && (
-                    <p className="mx-4 mb-3 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700">
-                      Sin stock en góndola se descontó: {e.itemsFaltantes.map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')}.
-                    </p>
-                  )}
-
-                  {e.retiroTercero?.dni && e.estado !== 'entregado' && e.estado !== 'cancelado' && (
-                    <p className="mx-4 mb-3 flex items-center gap-1.5 rounded-xl bg-[#EBF7FD] px-3 py-2 text-[11px] font-semibold text-[#007AB8]">
-                      <UserCheck size={13} /> Puede retirar: {e.retiroTercero.nombre} · DNI {e.retiroTercero.dni}
-                    </p>
-                  )}
-
-                  {e.estado === 'entregado' && e.retiradoPor && (
-                    <p className="px-4 pb-3 text-[11px] text-slate-400">Retiró: {e.retiradoPor}</p>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
+                  {anteriores.map((e) => (
+                    <article className="history-row" key={e.id}>
+                      <span className="history-check" style={e.estado === 'cancelado' ? { background: '#fee2e2', color: '#b91c1c' } : undefined}>
+                        {e.estado === 'cancelado' ? '✕' : <Check size={17} />}
+                      </span>
+                      <div>
+                        <strong>#{e.id.slice(0, 8).toUpperCase()} · {ESTADO[e.estado]}</strong>
+                        <span>
+                          {fmtFechaHora(e.entregadoEn || e.fecha)} · {e.items.reduce((s, i) => s + i.cantidad, 0)} producto(s)
+                          {e.retiradoPor ? ` · Retiró ${e.retiradoPor}` : ''}
+                        </span>
+                      </div>
+                      <b>{money(e.total)}</b>
+                      <Clock3 className="history-clock" size={17} />
+                    </article>
+                  ))}
+                </section>
+              )}
+            </>
+          )}
+        </section>
+      </div>
 
       {/* Barra de cobro: aparece cuando hay pedidos listos seleccionados */}
-      {elegidos.length > 0 && (
-        <div className="fade-in sticky bottom-4 z-10">
+      {elegidos.length > 0 && !qrOpen && (
+        <div className="fade-in sticky bottom-4 z-10 mx-auto w-full max-w-3xl px-4">
           <button
             type="button"
             onClick={() => setQrOpen(true)}
