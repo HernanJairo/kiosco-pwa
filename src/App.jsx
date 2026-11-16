@@ -78,7 +78,6 @@ const TABS = {
     { key: 'cobranza', label: 'Cobranzas', icon: HandCoins },
     { key: 'encargos', label: 'Encargos', icon: PackageCheck },
     { key: 'stock', label: 'Stock Rápido', icon: Boxes },
-    { key: 'config', label: 'Configuración', icon: Settings },
     { key: 'productos', label: 'Productos', icon: Package },
     { key: 'catalogo', label: 'Catálogo', icon: Store },
     { key: 'vencimientos', label: 'Vencimientos', icon: CalendarClock },
@@ -86,6 +85,8 @@ const TABS = {
     { key: 'ventas', label: 'Ventas', icon: Receipt },
     { key: 'notifs', label: 'Notificaciones', icon: Bell },
     { key: 'reportes', label: 'Reportes', icon: BarChart3 },
+    // Configuración siempre al final del menú (drawer y sidebar).
+    { key: 'config', label: 'Configuración', icon: Settings },
   ],
 }
 

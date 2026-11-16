@@ -9,26 +9,24 @@ import './BilleteraCliente.css'
 
 // "Mi Carnet QR" con la interfaz de credencial digital de v0: tarjeta
 // celeste con la marca, avatar, DNI, QR identificatorio (PseudoQR del
-// DNI, el mismo que lee el mostrador) y botón de pantalla completa con
-// brillo alto para escanear en caja.
+// DNI, el mismo que lee el mostrador) y botón "Ampliar" que abre un
+// modal interno blanco de alto contraste para escanear en caja.
 export default function CarnetCliente() {
   const { clienteSesion: a, config } = useKiosco()
-  const [bright, setBright] = useState(false)
+  const [qrGrande, setQrGrande] = useState(false)
+  const [qrSize, setQrSize] = useState(300)
   if (!a) return null
 
-  // Pantalla completa + brillo visual para que el lector tome el QR al
-  // instante. Si el navegador deniega fullscreen, queda el modo brillante.
-  const mostrarGrande = async () => {
-    setBright((b) => !b)
-    try {
-      await document.documentElement.requestFullscreen?.()
-    } catch {
-      /* fullscreen denegado: el modo brillante sigue disponible */
-    }
+  // "Ampliar": overlay modal interno de alto contraste (requestFullscreen
+  // en Android no agranda el QR ni sube brillo). Fondo blanco puro y el
+  // QR ocupando el 80% del ancho para que el lector lo tome al instante.
+  const mostrarGrande = () => {
+    setQrSize(Math.min(Math.round(window.innerWidth * 0.8), 380))
+    setQrGrande(true)
   }
 
   return (
-    <div className={`wallet-app${bright ? ' wallet-bright' : ''}`}>
+    <div className="wallet-app">
       <div className="wallet-shell">
         <section className="credential-panel" role="tabpanel" aria-label="Mi Carnet QR">
           <div className="credential-intro">
@@ -91,6 +89,34 @@ export default function CarnetCliente() {
           <SelectorAvatar cliente={a} />
         </Card>
       </div>
+
+      {/* Credencial ampliada: modal interno blanco puro de alto
+          contraste, QR al 80% del ancho y nombre/DNI grandes. */}
+      {qrGrande && (
+        <div
+          className="fade-in fixed inset-0 z-[120] flex flex-col items-center justify-center gap-5 bg-white px-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Credencial ampliada"
+          onClick={() => setQrGrande(false)}
+        >
+          <div className="flex flex-col items-center gap-1">
+            <strong className="text-2xl font-extrabold tracking-tight text-[#202125]">
+              {a.nombre} {a.apellido}
+            </strong>
+            <span className="text-lg font-semibold text-slate-500">DNI {a.dni}</span>
+          </div>
+          <PseudoQR text={a.dni} size={qrSize} />
+          <p className="text-sm font-medium text-slate-400">Acercá el código al lector de caja</p>
+          <button
+            type="button"
+            onClick={() => setQrGrande(false)}
+            className="mt-2 rounded-full bg-[#202125] px-10 py-3.5 text-base font-bold text-white shadow-lg transition-transform active:scale-95"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
     </div>
   )
 }

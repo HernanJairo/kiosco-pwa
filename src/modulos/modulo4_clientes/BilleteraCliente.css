@@ -16,3 +16,81 @@
 /* Mi Billetera en una sola columna centrada (sin aside lateral). */
 .wallet-app .wallet-panel-single{grid-template-columns:minmax(0,1fr);max-width:56rem;margin-inline:auto;width:100%}
 @media(max-width:520px){.wallet-app .wallet-panel-single{max-width:100%}}
+
+/* ================================================================
+   Legibilidad Android (todas las edades): escala de fuentes
+   normalizada. Conserva colores, negritas y estructura del diseño
+   v0; solo sube el piso tipográfico a 14px base y 13px en fechas/
+   metadatos. Al ir al final de la hoja gana por cascada.
+   ================================================================ */
+
+/* Metadatos / fechas / leyendas: piso 13px */
+.wallet-app .wallet-eyebrow,
+.wallet-app .wallet-shop strong,
+.wallet-app .wallet-shop small,
+.wallet-app .welcome-badge,
+.wallet-app .balance-caption,
+.wallet-app .credit-summary i,
+.wallet-app .debt-pill,
+.wallet-app .order-ready,
+.wallet-app .order-count-badge,
+.wallet-app .order-number,
+.wallet-app .ready-indicator,
+.wallet-app .progress-step strong,
+.wallet-app .pickup-person>div>span,
+.wallet-app .pickup-person>div>small,
+.wallet-app .account-enabled,
+.wallet-app .credential-verified,
+.wallet-app .credential-caption span,
+.wallet-app .credential-foot,
+.wallet-app .credential-security,
+.wallet-app .credential-customer>span:nth-child(2) small,
+.wallet-app .transaction-info span,
+.wallet-app .history-row>div span,
+.wallet-app .help-card small,
+.wallet-app .wallet-footer,
+.wallet-app .wallet-section-heading .wallet-eyebrow,
+.wallet-app .wallet-modal .wallet-eyebrow,
+.wallet-app .modal-choice-list small,
+.wallet-app .pickup-pin span,
+.wallet-app .wallet-profile { font-size: 13px; }
+
+/* Textos base, descripciones, botones y montos: piso 14px */
+.wallet-app .wallet-welcome>div:first-child>p:last-child,
+.wallet-app .balance-label,
+.wallet-app .credit-heading>span,
+.wallet-app .credit-summary,
+.wallet-app .credit-summary strong,
+.wallet-app .quick-actions button strong,
+.wallet-app .transaction-info strong,
+.wallet-app .transaction-amount,
+.wallet-app .history-row>div strong,
+.wallet-app .history-row>b,
+.wallet-app .help-card strong,
+.wallet-app .link-button,
+.wallet-app .order-product-lines span,
+.wallet-app .order-card-bottom,
+.wallet-app .order-detail-products>div,
+.wallet-app .order-detail-products>div strong,
+.wallet-app .order-detail-products h4,
+.wallet-app .order-detail-top p,
+.wallet-app .orders-heading p:last-child,
+.wallet-app .pickup-qr-button,
+.wallet-app .pickup-person strong,
+.wallet-app .brightness-button,
+.wallet-app .credential-intro>p:last-child,
+.wallet-app .credential-caption strong,
+.wallet-app .credential-customer>span:nth-child(2) strong,
+.wallet-app .wallet-form label,
+.wallet-app .wallet-form input,
+.wallet-app .wallet-primary-button,
+.wallet-app .wallet-toast,
+.wallet-app .modal-description,
+.wallet-app .modal-choice-list strong { font-size: 14px; }
+
+/* Encabezados de sección un poco más presentes (manteniendo jerarquía) */
+.wallet-app .wallet-section-heading h2 { font-size: 19px; }
+.wallet-app .orders-heading h2 { font-size: 22px; }
+.wallet-app .order-card-head strong { font-size: 14px; }
+.wallet-app .order-card-bottom strong { font-size: 15px; }
+.wallet-app .order-detail-products .order-total-line strong { font-size: 15px; }

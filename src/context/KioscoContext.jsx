@@ -86,6 +86,24 @@ export function KioscoProvider({ children }) {
   const [toasts, setToasts] = useState([])
   const [remoto, setRemoto] = useState(false) // true si Firestore respondió
 
+  // Espejo síncrono del estado más reciente. `mutate` y las
+  // suscripciones escriben siempre sobre dbRef.current (no sobre el
+  // `prev` del updater de React, que puede llegar atrasado cuando hay
+  // renders en vuelo) — así los "let x; mutate(...); if (x) sync(x)"
+  // funcionan de forma determinista y las reglas de negocio que lanzan
+  // dentro de fn llegan al try/catch del llamador en vez de explotar
+  // como error de render.
+  const dbRef = useRef(db)
+  const commitDb = (n) => {
+    dbRef.current = n
+    setDb(n)
+  }
+  // Estado fresco del encargo para validaciones del POS: el `encargos`
+  // del render puede ir un tick atrás respecto al ref (ej. el botón
+  // "Cobrar en caja" de una tarjeta que aún no desapareció).
+  const estadoEncargoActual = (id) =>
+    dbRef.current.encargos?.find((e) => e.id === id)?.estado || null
+
   useEffect(() => {
     localStorage.setItem(DB_KEY, JSON.stringify(db))
   }, [db])
@@ -116,21 +134,17 @@ export function KioscoProvider({ children }) {
       for (const col of fs.COLECCIONES_SUSCRIPTAS) {
         offs.push(
           fs.suscribir(col, (docs) => {
-            setDb((prev) => {
-              const n = clone(prev)
-              n[col] = col === 'productos' ? docs.map(normalizarFotos) : docs
-              return n
-            })
+            const n = clone(dbRef.current)
+            n[col] = col === 'productos' ? docs.map(normalizarFotos) : docs
+            commitDb(n)
           })
         )
       }
       offs.push(
         fs.suscribirConfig((data) => {
-          setDb((prev) => {
-            const n = clone(prev)
-            n.config = { ...buildSeed().config, ...(data || {}) }
-            return n
-          })
+          const n = clone(dbRef.current)
+          n.config = { ...buildSeed().config, ...(data || {}) }
+          commitDb(n)
         })
       )
     })()
@@ -165,7 +179,15 @@ export function KioscoProvider({ children }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800)
   }
 
-  const mutate = (fn) => setDb((prev) => { const n = clone(prev); fn(n); return n })
+  // Mutación síncrona del borrador: fn se ejecuta YA sobre el estado
+  // más reciente, así los errores de negocio se propagan al llamador y
+  // las variables capturadas (e, clienteSync, productosSync…) siempre
+  // quedan cargadas antes del sync con Firestore.
+  const mutate = (fn) => {
+    const n = clone(dbRef.current)
+    fn(n)
+    commitDb(n)
+  }
 
   // Registra un evento en el centro de notificaciones (campanita del
   // TopBar + panel de Actividad). `para` es 'staff', 'admin' o
@@ -188,6 +210,7 @@ export function KioscoProvider({ children }) {
   // utils/acceso.js para compartirla con el recupero de PIN.
   const loginCliente = async (ident, pin) => {
     await sleep()
+    const db = dbRef.current
     const c = clientePorIdentificador(db.clientes, ident)
     if (!c || c.pin !== String(pin).trim()) {
       throw new Error('DNI/correo o PIN incorrectos.')
@@ -200,6 +223,7 @@ export function KioscoProvider({ children }) {
   // Acceso del mostrador: usuario (DNI o username) + PIN de 4 dígitos.
   const loginStaff = async (usuario, pin) => {
     await sleep()
+    const db = dbRef.current
     const u = ops.autenticarPersonal(db, { usuario, pin })
     const s = { rol: u.rol, id: u.id, nombre: `${u.nombre} ${u.apellido}`.trim() }
     setSession(s)
@@ -226,7 +250,7 @@ export function KioscoProvider({ children }) {
       const p = n.productos.find((x) => x.id === id)
       if (p) Object.assign(p, normalizarFotos({ ...p, ...patch }))
     })
-    const p = db.productos.find((x) => x.id === id)
+    const p = dbRef.current.productos.find((x) => x.id === id)
     if (p) sync(fs.upsertProducto(normalizarFotos({ ...p, ...patch })))
   }
 
@@ -243,7 +267,7 @@ export function KioscoProvider({ children }) {
   // el feed del admin y la auditoría de sesión del vendedor.
   const ajustarStock = async (productoId, stockNuevo) => {
     await sleep(60)
-    const antes = db.productos.find((x) => x.id === productoId)
+    const antes = dbRef.current.productos.find((x) => x.id === productoId)
     if (!antes) throw new Error('Producto no encontrado.')
     const nuevo = Math.max(0, Number(stockNuevo) || 0)
     const delta = nuevo - antes.stock
@@ -267,10 +291,14 @@ export function KioscoProvider({ children }) {
   /* ================= VENTAS / POS ================= */
   // Venta libre por defecto: efectivo y transferencia no exigen cliente.
   // Solo "cuenta corriente / fiado" requiere cliente con saldo o límite.
-  const registrarVenta = async ({ items, metodo, clienteId = null, vendedor = 'mostrador', excepcionFiado = false, enEspera = false, retiradoPor = null, reservado = false }) => {
+  const registrarVenta = async ({ items, metodo, clienteId = null, vendedor = 'mostrador', excepcionFiado = false, excepcionPausa = false, enEspera = false, retiradoPor = null, reservado = false }) => {
     await sleep(220)
-    if (!db.config.abierto) throw new Error('Kiosco cerrado: no se pueden registrar ventas.')
-    const { detalle, total, cliente } = ops.validarVenta(db, { items, metodo, clienteId, excepcionFiado, omitirStock: reservado })
+    const db = dbRef.current
+    // "Cierre de puertas": con el local cerrado el mostrador (vendedor
+    // y admin) sigue cobrando a quienes quedaron adentro; el catálogo
+    // web para clientes se mantiene cerrado (validación aparte).
+    const localCerrado = !db.config.abierto
+    const { detalle, total, cliente } = ops.validarVenta(db, { items, metodo, clienteId, excepcionFiado, excepcionPausa, omitirStock: reservado })
 
     const venta = {
       id: uid(),
@@ -288,6 +316,14 @@ export function KioscoProvider({ children }) {
       // Quién retiró físicamente la bolsa cuando la venta cierra un
       // encargo (titular o tercero autorizado): queda en el movimiento.
       retiradoPor: retiradoPor || null,
+      // Trazabilidad: fiado cobrado con los fiados pausados, autorizado
+      // por un admin (queda marcado también en el feed de actividad).
+      // El campo solo existe cuando aplica: un `undefined` haría que
+      // Firestore rechace el documento entero.
+      ...(excepcionPausa ? { excepcionPausa: true } : {}),
+      // Trazabilidad del "cierre de puertas": venta cobrada con el
+      // local marcado como cerrado.
+      ...(localCerrado ? { localCerrado: true } : {}),
     }
 
     // Borrador con la venta aplicada: de ahí sale el doc del cliente que
@@ -330,7 +366,7 @@ export function KioscoProvider({ children }) {
       avisar(
         n,
         'staff',
-        `Venta ${enEspera ? 'en espera ' : ''}· ${money(total)} · ${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)${cliente ? ` · ${venta.clienteNombre}` : ''}.`,
+        `Venta ${localCerrado ? '(con local cerrado) ' : ''}${enEspera ? 'en espera ' : ''}· ${money(total)} · ${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)${cliente ? ` · ${venta.clienteNombre}` : ''}${excepcionPausa ? ' · (Fiados pausados - autorizado por Admin)' : ''}.`,
         'venta',
         'ventas',
         vendedor
@@ -391,7 +427,7 @@ export function KioscoProvider({ children }) {
   // restaura el stock.
   const aprobarCobroEspera = async (ventaId) => {
     await sleep(90)
-    const venta = db.ventas.find((v) => v.id === ventaId)
+    const venta = dbRef.current.ventas.find((v) => v.id === ventaId)
     if (!venta || venta.anulada || venta.estado !== 'en_espera_transferencia') {
       throw new Error('La operación ya no está en espera.')
     }
@@ -404,6 +440,7 @@ export function KioscoProvider({ children }) {
 
   const anularVenta = async (ventaId) => {
     await sleep()
+    const db = dbRef.current
     const venta = db.ventas.find((v) => v.id === ventaId)
     if (!venta) throw new Error('Venta no encontrada.')
 
@@ -437,6 +474,15 @@ export function KioscoProvider({ children }) {
         .map((i) => n.productos.find((x) => x.id === i.productoId))
         .filter(Boolean)
       if (venta.clienteId) clienteSync = n.clientes.find((x) => x.id === venta.clienteId) || null
+      // Feed: la anulación queda asentada con monto, ítems y autor.
+      avisar(
+        n,
+        'staff',
+        `Venta anulada · ${money(venta.total)} (${venta.items.reduce((s, i) => s + i.cantidad, 0)} ítems)`,
+        'venta',
+        'ventas',
+        session?.nombre || 'mostrador'
+      )
     })
     if (!remotoOk) {
       sync(fs.registrarVenta({ ...venta, anulada: true }))
@@ -450,6 +496,7 @@ export function KioscoProvider({ children }) {
   // para el auto-registro público. El DNI es único en todo el sistema.
   const crearCliente = async ({ nombre, apellido, dni, telefono = '', email = '', pin, limiteFiado = 0 }) => {
     await sleep()
+    const db = dbRef.current
     const datos = { nombre, apellido, dni, telefono, email, pin, limiteFiado }
     ops.validarAltaCliente(db.clientes, datos)
     const cliente = ops.nuevoCliente(datos)
@@ -475,7 +522,7 @@ export function KioscoProvider({ children }) {
   // Regla de integridad: no se puede eliminar un cliente con deuda > 0.
   const eliminarCliente = async (clienteId) => {
     await sleep()
-    const eliminado = ops.eliminarClienteDb(clone(db), clienteId) // valida antes de mutar
+    const eliminado = ops.eliminarClienteDb(clone(dbRef.current), clienteId) // valida antes de mutar
     let descartadas = []
     mutate((n) => {
       ops.eliminarClienteDb(n, clienteId)
@@ -508,7 +555,7 @@ export function KioscoProvider({ children }) {
   const resetearPinCliente = async (clienteId, pin = ops.PIN_TEMPORAL) => {
     await sleep(90)
     if (!/^\d{4}$/.test(String(pin))) throw new Error('El PIN temporal debe tener 4 dígitos.')
-    const c = db.clientes.find((x) => x.id === clienteId)
+    const c = dbRef.current.clientes.find((x) => x.id === clienteId)
     if (!c) throw new Error('Cliente no encontrado.')
     let clienteSync = null
     mutate((n) => {
@@ -539,7 +586,7 @@ export function KioscoProvider({ children }) {
     if (origen === 'cliente') {
       throw new Error('El pago en efectivo solo se recibe en el mostrador. Informá una transferencia.')
     }
-    const cliente = db.clientes.find((c) => c.id === clienteId)
+    const cliente = dbRef.current.clientes.find((c) => c.id === clienteId)
     if (!cliente) throw new Error('Cliente no encontrado.')
 
     const detalle = origen === 'acreditacion' ? 'Transferencia acreditada' : 'Registrado en kiosco'
@@ -560,7 +607,7 @@ export function KioscoProvider({ children }) {
     await sleep()
     monto = Number(monto)
     if (!monto || monto <= 0) throw new Error('Ingresá un monto válido.')
-    const cliente = db.clientes.find((c) => c.id === clienteId)
+    const cliente = dbRef.current.clientes.find((c) => c.id === clienteId)
     if (!cliente) throw new Error('Cliente no encontrado.')
     const detalle = origen === 'acreditacion' ? 'Transferencia acreditada' : 'Kiosco'
     let clienteSync = null
@@ -580,7 +627,7 @@ export function KioscoProvider({ children }) {
   // pendiente en la bandeja hasta que el mostrador la valide.
   const solicitarTransferencia = async ({ clienteId, monto, origen = 'cliente', tipoOperacion = 'deuda' }) => {
     await sleep()
-    const solicitud = ops.nuevaSolicitudTransferencia(db, { clienteId, monto, origen, tipoOperacion })
+    const solicitud = ops.nuevaSolicitudTransferencia(dbRef.current, { clienteId, monto, origen, tipoOperacion })
     mutate((n) => {
       n.solicitudes.unshift(solicitud)
       avisar(
@@ -599,7 +646,7 @@ export function KioscoProvider({ children }) {
   // se avisa al mostrador por la campana.
   const solicitarResetPin = async (dni) => {
     await sleep()
-    const res = ops.nuevaSolicitudResetPin(db, { dni })
+    const res = ops.nuevaSolicitudResetPin(dbRef.current, { dni })
     if (!res) throw new Error('No encontramos ningún cliente registrado con ese DNI.')
     if (!res.duplicada) {
       mutate((n) => {
@@ -636,6 +683,7 @@ export function KioscoProvider({ children }) {
 
   const descartarSolicitud = async (solicitudId) => {
     await sleep(90)
+    const db = dbRef.current
     const s = db.solicitudes.find((x) => x.id === solicitudId)
     const cliente = s && db.clientes.find((c) => c.id === s.clienteId)
     mutate((n) => {
@@ -659,7 +707,7 @@ export function KioscoProvider({ children }) {
   // Alta de integrante (admin o vendedor) desde "Equipo y Permisos".
   const addPersonal = async (datos) => {
     await sleep()
-    ops.validarAltaPersonal(db.personal, datos)
+    ops.validarAltaPersonal(dbRef.current.personal, datos)
     const u = ops.nuevoPersonal(datos)
     mutate((n) => {
       ops.validarAltaPersonal(n.personal, datos) // revalida sobre el borrador
@@ -687,7 +735,7 @@ export function KioscoProvider({ children }) {
 
   const eliminarPersonal = async (id) => {
     await sleep()
-    ops.eliminarPersonalDb(clone(db), id) // valida antes de mutar (último admin)
+    ops.eliminarPersonalDb(clone(dbRef.current), id) // valida antes de mutar (último admin)
     mutate((n) => ops.eliminarPersonalDb(n, id))
     sync(fs.borrarPersonal(id))
   }
@@ -708,8 +756,9 @@ export function KioscoProvider({ children }) {
      mostrando su QR; el cobro se registra como venta normal. */
   const enviarEncargo = async (items, retiroTercero = null) => {
     await sleep(120)
+    const db = dbRef.current
     if (!clienteSesion) throw new Error('Tenés que iniciar sesión para encargar.')
-    if (!config.recibiendoEncargos || config.encargosActivos === false) {
+    if (!db.config.recibiendoEncargos || db.config.encargosActivos === false) {
       throw new Error('Los encargos están pausados temporalmente.')
     }
     // El encargo se construye sobre un borrador para reservar el stock
@@ -907,6 +956,7 @@ export function KioscoProvider({ children }) {
   /* ================= CONFIG ================= */
   const updateConfig = async (patch) => {
     await sleep()
+    const db = dbRef.current
     const abre = patch?.abierto === true && !db.config.abierto
     // Cambios auditables: cada toggle de estado operativo deja registro
     // con autor/rol/hora y le avisa a la administración.
@@ -927,9 +977,10 @@ export function KioscoProvider({ children }) {
           accion: `ESTADO_${clave.toUpperCase()}`,
           detalle: `${texto} · ${n.config.nombreKiosco}`,
         })
-        // La administración y el mostrador se enteran por la campanita.
-        avisar(n, 'admin', `${texto}: ${session?.nombre || 'mostrador'} (${session?.rol || '?'}) lo cambió.`, 'auditoria', 'caja', session?.nombre || 'mostrador')
-        avisar(n, 'staff', `${texto} — por ${session?.nombre || 'mostrador'}.`, 'auditoria', 'caja', session?.nombre || 'mostrador')
+        // Una sola notificación limpia por evento: el feed del admin y
+        // la actividad del vendedor muestran 'staff', así que un aviso
+        // por bandeja duplicaba el registro.
+        avisar(n, 'staff', `${texto} · por ${session?.nombre || 'mostrador'} (${session?.rol || '?'})`, 'auditoria', 'caja', session?.nombre || 'mostrador')
       }
       // Apertura de caja: el mostrador se entera por la campanita.
       if (abre) avisar(n, 'staff', 'Apertura de caja: el kiosco habilitó el mostrador.', 'apertura', 'caja', session?.nombre || 'mostrador')
@@ -939,7 +990,7 @@ export function KioscoProvider({ children }) {
 
   const resetDemo = async () => {
     await sleep(200)
-    setDb(buildSeed())
+    commitDb(buildSeed())
     setSession(null)
     notify('Datos de demostración restablecidos.', 'info')
   }
@@ -997,6 +1048,7 @@ export function KioscoProvider({ children }) {
     marcarEncargoListo,
     entregarEncargo,
     cancelarEncargo,
+    estadoEncargoActual,
     addPersonal,
     updatePersonal,
     eliminarPersonal,

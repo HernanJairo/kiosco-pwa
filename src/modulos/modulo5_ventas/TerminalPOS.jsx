@@ -88,7 +88,7 @@ function ClienteElegido({ cliente, onQuitar, detalle }) {
 }
 
 export default function TerminalPOS() {
-  const { productos, clientes, categorias, ventas, registrarVenta, aprobarCobroEspera, anularVenta, notify, session, config, encargos, entregarEncargo } = useKiosco()
+  const { productos, clientes, categorias, ventas, registrarVenta, aprobarCobroEspera, anularVenta, notify, session, config, encargos, entregarEncargo, estadoEncargoActual } = useKiosco()
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('Todas')
   const [cart, setCart] = useState(() => {
@@ -120,8 +120,14 @@ export default function TerminalPOS() {
   const limiteFiado = clienteSel ? limiteFiadoVigente(clienteSel, config) : Number(config.limiteFiadoGlobal) || 0
 
   // Contingencia operativa: con los fiados pausados la Cta. Corriente se
-  // apaga en el modal de cobro (validarVenta también la rechaza).
+  // apaga en el modal de cobro para el vendedor (validarVenta también la
+  // rechaza); el admin puede autorizar la excepción y queda asentada.
   const fiadosPausados = config.fiadosActivos === false
+  const esAdmin = session?.rol === 'admin'
+  const fiadoExcepcion = metodo === 'fiado' && fiadosPausados && esAdmin
+  // "Cierre de puertas": con el local cerrado el mostrador sigue
+  // cobrando; cada venta queda marcada como "con local cerrado".
+  const localCerrado = !config.abierto
 
   // Persistencia del ticket: cada cambio del carrito se refleja en
   // sessionStorage (el estado inicial ya lo restauró al montar). Se
@@ -181,7 +187,6 @@ export default function TerminalPOS() {
   const enCarrito = (id) => cart.find((i) => i.productoId === id)?.cantidad || 0
 
   const agregar = (p) => {
-    if (!config.abierto) return notify('Kiosco cerrado: no se pueden registrar ventas.', 'warn')
     const actual = enCarrito(p.id)
     if (actual + 1 > p.stock) return notify(`Sin stock suficiente de ${p.nombre}.`, 'warn')
     setCart((c) =>
@@ -233,12 +238,32 @@ export default function TerminalPOS() {
   const ejecutarVenta = async ({ excepcionFiado = false, enEspera: enEsperaFlag = false } = {}) => {
     setBusy(true)
     try {
+      // Anti doble-cobro: si la tarjeta del encargo quedó clicable un
+      // instante tras la entrega (render atrasado), el ticket puede
+      // referenciar pedidos ya cerrados. Se revalida contra el estado
+      // fresco antes de asentar la venta.
+      if (encargosSel) {
+        const cerrado = encargosSel.encargos.find((e) => {
+          const est = estadoEncargoActual(e.id)
+          return est !== 'en_preparacion' && est !== 'listo_retiro'
+        })
+        if (cerrado) {
+          setCobroOpen(false)
+          limpiarTicket()
+          setEncargosSel(null)
+          notify(`El pedido #${cerrado.id.slice(0, 8).toUpperCase()} ya fue entregado o cancelado. Se descartó el ticket.`, 'warn')
+          return
+        }
+      }
       const venta = await registrarVenta({
         items: cart,
         metodo,
         clienteId: clienteSel?.id,
         vendedor: session?.nombre || 'mostrador',
         excepcionFiado,
+        // Fiado con el servicio pausado: solo lo valida un admin y el
+        // feed lo marca como "(Fiados pausados - autorizado por Admin)".
+        excepcionPausa: fiadoExcepcion,
         enEspera: enEsperaFlag,
         retiradoPor: encargosSel?.retiradoPor || null,
         // Retiro de encargo: la mercadería ya quedó reservada (fuera de
@@ -261,7 +286,7 @@ export default function TerminalPOS() {
         notify(`Venta en espera · ${money(venta.total)}. Aprobala cuando impacte la transferencia.`, 'info')
       } else {
         setTicket(venta)
-        notify(`Venta registrada · ${money(venta.total)}`)
+        notify(localCerrado ? `Venta registrada con local cerrado · ${money(venta.total)}` : `Venta registrada · ${money(venta.total)}`)
       }
     } catch (err) {
       notify(err.message, 'error')
@@ -273,7 +298,6 @@ export default function TerminalPOS() {
   // El botón "Cobrar $X" nunca asienta la venta: solo abre el modal de
   // cobro, donde se elige método y se confirma en un segundo paso.
   const abrirCobro = () => {
-    if (!config.abierto) return notify('Kiosco cerrado: no se pueden registrar ventas.', 'warn')
     if (!cart.length) return notify('El carrito está vacío.', 'warn')
     setCobroOpen(true)
   }
@@ -282,7 +306,6 @@ export default function TerminalPOS() {
   // deriva al flujo propio de cada método de pago.
   const confirmarCobro = () => {
     if (busy) return
-    if (!config.abierto) return notify('Kiosco cerrado: no se pueden registrar ventas.', 'warn')
     if (!cart.length) return notify('El carrito está vacío.', 'warn')
     if (metodo === 'saldo' && !clienteSel) return notify('Pagar con billetera exige seleccionar un cliente registrado.', 'warn')
     if (metodo === 'saldo' && clienteSel && (clienteSel.saldo || 0) < total) {
@@ -389,10 +412,13 @@ export default function TerminalPOS() {
     for (const id of ids) {
       const encargo = (encargos || []).find((e) => e.id === id)
       if (!encargo) return notify('El QR no corresponde a un encargo vigente.', 'error')
-      if (encargo.estado === 'entregado' || encargo.estado === 'cancelado') {
+      // El estado se chequea fresco (ref): la tarjeta del render puede ir
+      // un instante atrás tras una entrega recién confirmada.
+      const estadoActual = estadoEncargoActual(id)
+      if (estadoActual === 'entregado' || estadoActual === 'cancelado') {
         return notify(`El pedido #${encargo.id.slice(0, 8).toUpperCase()} ya fue entregado o cancelado.`, 'warn')
       }
-      if (encargo.estado === 'en_preparacion') {
+      if (estadoActual === 'en_preparacion' || encargo.estado === 'en_preparacion') {
         return notify(`La bolsa #${encargo.id.slice(0, 8).toUpperCase()} todavía se está preparando: marcala "lista" primero.`, 'warn')
       }
       elegidos.push(encargo)
@@ -501,13 +527,15 @@ export default function TerminalPOS() {
         <p className="mb-2 text-xs font-medium text-slate-500">Método de pago *</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {METODOS.map(({ k, label, icon: Icon, active }) => {
-            const bloqueado = k === 'fiado' && fiadosPausados
+            // Vendedor: fiado bloqueado. Admin: lo puede elegir igual,
+            // autorizando la excepción (queda asentada en el feed).
+            const bloqueado = k === 'fiado' && fiadosPausados && !esAdmin
             return (
               <button
                 key={k}
                 onClick={() => !bloqueado && setMetodo(k)}
                 disabled={bloqueado}
-                title={bloqueado ? 'Fiados pausados temporalmente' : undefined}
+                title={bloqueado ? 'Los fiados están pausados actualmente' : undefined}
                 className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-3.5 text-xs font-bold transition-all duration-150 active:scale-[0.97] sm:text-sm ${
                   bloqueado
                     ? 'cursor-not-allowed border-slate-200 text-slate-300 opacity-60'
@@ -516,13 +544,16 @@ export default function TerminalPOS() {
               >
                 <Icon size={19} />
                 {label}
+                {k === 'fiado' && fiadosPausados && esAdmin && (
+                  <span className="text-[9px] font-extrabold uppercase tracking-wide text-amber-500">excepción</span>
+                )}
               </button>
             )
           })}
         </div>
-        {fiadosPausados && (
+        {fiadosPausados && !esAdmin && (
           <p className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-amber-600">
-            <AlertTriangle size={13} /> Fiados pausados temporalmente
+            <AlertTriangle size={13} /> Los fiados están pausados actualmente
           </p>
         )}
       </div>
@@ -556,6 +587,13 @@ export default function TerminalPOS() {
         </div>
       ) : metodo === 'fiado' ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+          {fiadoExcepcion && (
+            <p className="mb-2 flex items-start gap-1.5 text-[11px] font-semibold text-amber-700">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+              Los fiados están pausados actualmente: como administrador estás autorizando una
+              excepción — quedará asentada como «Fiados pausados - autorizado por Admin».
+            </p>
+          )}
           {clienteSel ? (
             <ClienteElegido
               cliente={clienteSel}
@@ -652,10 +690,13 @@ export default function TerminalPOS() {
         </div>
       )}
 
-      {!config.abierto && (
-        <div className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 text-xs font-medium text-rose-700">
+      {localCerrado && (
+        <div className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-medium text-amber-800">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          <span>Kiosco cerrado: las ventas están bloqueadas hasta reabrir el mostrador.</span>
+          <span>
+            Local cerrado: podés seguir cobrando a los clientes que quedaron adentro.
+            La venta quedará asentada como «con local cerrado».
+          </span>
         </div>
       )}
     </>
@@ -666,11 +707,11 @@ export default function TerminalPOS() {
       variant={superaLimite ? 'danger' : 'primary'}
       size={size}
       onClick={abrirCobro}
-      disabled={busy || !cart.length || !config.abierto}
+      disabled={busy || !cart.length}
       className={`${className} rounded-2xl py-3.5 text-base font-extrabold`}
     >
       {busy ? <Loader2 size={18} className="animate-spin" /> : <Banknote size={18} />}
-      {!config.abierto ? 'Kiosco cerrado' : busy ? 'Procesando…' : `Cobrar ${money(total)}`}
+      {busy ? 'Procesando…' : `Cobrar ${money(total)}`}
     </Button>
   )
 
@@ -734,7 +775,7 @@ export default function TerminalPOS() {
             <div className="product-grid">
               {list.map((p) => {
                 const agotado = p.stock <= 0
-                const disabled = agotado || !config.abierto
+                const disabled = agotado
                 const tono = TONOS[Math.max(0, categorias.indexOf(p.categoria)) % TONOS.length]
                 const fotos = fotosDe(p)
                 return (
@@ -808,9 +849,20 @@ export default function TerminalPOS() {
                           </button>
                         </div>
                       ) : (
-                        <span className="add-button" aria-hidden="true">
+                        /* Sin unidades aún: el "+" azul también agrega
+                           directo (stopPropagation para no disparar el
+                           handler de la tarjeta dos veces). */
+                        <button
+                          type="button"
+                          className="add-button"
+                          aria-label={`Agregar ${p.nombre} al ticket`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            agregar(p)
+                          }}
+                        >
                           <Plus size={19} />
-                        </span>
+                        </button>
                       ))}
                   </article>
                 )
@@ -935,7 +987,7 @@ export default function TerminalPOS() {
               variant={superaLimite ? 'danger' : 'success'}
               size="lg"
               onClick={confirmarCobro}
-              disabled={busy || !cart.length || !config.abierto}
+              disabled={busy || !cart.length}
               className="flex-1"
             >
               {busy ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}

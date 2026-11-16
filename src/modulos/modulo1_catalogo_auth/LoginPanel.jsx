@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Eye, EyeOff, IdCard, Info, KeyRound, Loader2, LockKeyhole, MapPin, MessageCircle, Phone, QrCode, SearchX, ShieldCheck, Smartphone, Sparkles, Store, User, UserPlus, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock3, Eye, EyeOff, IdCard, Info, KeyRound, Loader2, LockKeyhole, MapPin, MessageCircle, Phone, SearchX, ShieldCheck, Smartphone, Sparkles, Store, User, UserPlus, X } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { clientePorIdentificador } from '../../utils/acceso'
 import { textoResetPin, waLink } from '../../utils/whatsapp'
@@ -73,6 +73,12 @@ export default function LoginPanel() {
     <div className="login-shell">
       {/* Panel de bienvenida (desktop) / cabecera con mosaico (mobile) */}
       <div className="welcome-panel">
+        <div className="panel-brand">
+          <span className="brand-mark">
+            <span>Y</span>
+          </span>
+          <span className="panel-brand-name">Yapa</span>
+        </div>
         <div className="mosaic">
           <div className="mosaic-glow" />
           {imgOk ? (
@@ -87,16 +93,6 @@ export default function LoginPanel() {
               <Store size={72} strokeWidth={1.2} />
             </div>
           )}
-          <p className="mosaic-topline">
-            <span>Tu kiosco de siempre,</span>
-            <span>ahora más rápido.</span>
-          </p>
-          <span className="floating-tag tag-a">
-            <i className="tag-dot" /> Retiro express en caja
-          </span>
-          <span className="floating-tag tag-b">
-            <QrCode size={14} /> Pedidos por QR
-          </span>
         </div>
 
         <div className="store-card">

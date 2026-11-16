@@ -66,7 +66,7 @@ export default function SplashScreen({ onFin }) {
             ¡Bienvenido a Yapa!
           </h1>
           <p className="mt-1.5 text-sm font-medium text-slate-500">
-            Tu kiosco inteligente, rápido y sin vueltas
+            Tu kiosco de siempre, ahora más rápido.
           </p>
         </div>
       </div>

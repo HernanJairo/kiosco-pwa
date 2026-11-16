@@ -25,12 +25,10 @@
 .login-shell .mosaic::after { position: absolute; z-index: 1; content: ''; inset: 48% 0 0; background: linear-gradient(180deg, transparent, rgba(255,255,255,.8)); pointer-events: none; }
 .login-shell .mosaic-glow { position: absolute; inset: -20%; background: radial-gradient(ellipse at 47% 45%, rgba(255,255,255,0) 15%, rgba(255,255,255,.48) 85%); z-index: 1; pointer-events: none; }
 .login-shell .snack-art { width: 100%; height: 100%; object-fit: cover; display: block; }
-.login-shell .mosaic-topline { position: absolute; z-index: 2; top: 26px; left: 30px; display: flex; flex-direction: column; color: #202125; font-size: clamp(25px, 3vw, 39px); line-height: 1.16; letter-spacing: -1.8px; font-weight: 800; }
-.login-shell .mosaic-topline span:last-child { color: var(--blue); }
-.login-shell .floating-tag { position: absolute; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 11px 15px; background: rgba(255,255,255,.92); border-radius: 999px; box-shadow: 0 8px 24px #20212512; font-size: 12px; font-weight: 700; }
-.login-shell .tag-a { left: 24px; bottom: 28px; }
-.login-shell .tag-b { right: 22px; bottom: 27px; }
-.login-shell .tag-dot, .login-shell .open-status i, .login-shell .mobile-dot { display: inline-block; width: 8px; height: 8px; background: #38bd78; border-radius: 50%; }
+.login-shell .panel-brand { display: flex; align-items: center; gap: 13px; width: 100%; max-width: 670px; margin: 0 auto 22px; }
+.login-shell .panel-brand .brand-mark { width: 46px; height: 46px; border-radius: 15px; }
+.login-shell .panel-brand .brand-mark span { font-size: 28px; }
+.login-shell .panel-brand-name { color: #202125; font-size: clamp(30px, 3vw, 40px); font-weight: 900; letter-spacing: -2.2px; }
 .login-shell .store-card { position: relative; display: flex; align-items: center; gap: 14px; max-width: 670px; width: 100%; margin: 18px auto 0; padding: 15px 18px; border-radius: 18px; background: #fff; box-shadow: 0 6px 24px rgba(32,33,37,.07); }
 .login-shell .store-icon { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; background: var(--ice); color: var(--blue-dark); }
 .login-shell .store-details { display: flex; flex: 1; flex-direction: column; gap: 2px; }
@@ -142,12 +140,8 @@
   .login-shell { display: flex; flex-direction: column; min-height: 100svh; }
   .login-shell .welcome-panel { display: block; min-height: 0; height: 205px; padding: 0; background: white; }
   .login-shell .mosaic { height: 205px; width: 100%; margin: 0; border-radius: 0 0 27px 27px; }
-  .login-shell .mosaic-topline { top: 19px; left: 22px; font-size: 26px; }
-  .login-shell .floating-tag { padding: 8px 11px; font-size: 10px; }
-  .login-shell .tag-a { left: 16px; bottom: 15px; }
-  .login-shell .tag-b { right: 15px; bottom: 15px; }
   .login-shell .mosaic::after { inset: 65% 0 0; }
-  .login-shell .store-card, .login-shell .welcome-note, .login-shell .panel-footnote { display: none; }
+  .login-shell .store-card, .login-shell .welcome-note, .login-shell .panel-footnote, .login-shell .panel-brand { display: none; }
   .login-shell .form-panel { min-height: calc(100svh - 205px); align-items: flex-start; padding: 19px 24px 30px; }
   .login-shell .form-content { max-width: 480px; margin: auto; }
   .login-shell .form-header { margin-bottom: 17px; }
@@ -176,3 +170,40 @@
   .login-shell .desktop-break { display: none; }
 }
 @media (max-width: 390px) { .login-shell .form-panel { padding-inline: 19px; } .login-shell .welcome-panel, .login-shell .mosaic { height: 185px; } .login-shell .form-panel { min-height: calc(100svh - 185px); } .login-shell .form-grid { gap: 10px; } .login-shell .dialog { padding: 27px 22px; } .login-shell .dialog h2 { font-size: 24px; } }
+
+/* ================================================================
+   Legibilidad Android (todas las edades): escala de fuentes
+   normalizada para la pantalla de acceso. Conserva colores,
+   negritas y estructura del diseño v0; solo sube el piso
+   tipográfico a 13.5px base y 12.5px en metadatos. Al ir al final
+   de la hoja gana por cascada.
+   ================================================================ */
+
+/* Cuerpo base, botones y formularios: piso 13.5px */
+.login-shell .store-caption,
+.login-shell .status-pill,
+.login-shell .top-info,
+.login-shell .top-catalog,
+.login-shell .forgot-link,
+.login-shell .demo-btn,
+.login-shell .pwa-copy,
+.login-shell .pwa-copy strong,
+.login-shell .pwa-install,
+.login-shell .install-steps li,
+.login-shell .install-steps b,
+.login-shell .form-notice,
+.login-shell .form-error,
+.login-shell .form-stack label,
+.login-shell .show-pin,
+.login-shell .back-link,
+.login-shell .mobile-store { font-size: 13.5px; }
+
+/* Metadatos, leyendas y notas: piso 12.5px */
+.login-shell .eyebrow,
+.login-shell .panel-footnote,
+.login-shell .pin-label span,
+.login-shell .divider,
+.login-shell .demo-label,
+.login-shell .demo-btn small,
+.login-shell .legal-note,
+.login-shell .mobile-status { font-size: 12.5px; }

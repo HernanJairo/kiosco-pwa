@@ -29,3 +29,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Artefactos generados (QA y guia de usuario)
+capturas-guia/
+Guia_Completa_Yapa.pdf

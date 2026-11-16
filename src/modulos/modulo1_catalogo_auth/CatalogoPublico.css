@@ -67,7 +67,7 @@
 .art-shine { position: absolute; top: 17px; left: calc(50% - 18px); z-index: 2; width: 8px; height: 43px; border-radius: 99px; background: #ffffff55; transform: rotate(-7deg); }
 .product-category { margin: 11px 0 4px; color: #92949b; font-size: 9px; font-weight: 600; }
 .product-category span { margin: 0 3px; color: #c1c2c6; }
-.product-name { max-width: calc(100% - 12px); overflow: hidden; color: #282a32; font-size: 13px; font-weight: 800; letter-spacing: -.25px; text-overflow: ellipsis; white-space: nowrap; }
+.product-name { max-width: calc(100% - 12px); overflow: hidden; color: #282a32; font-size: 13px; font-weight: 800; letter-spacing: -.25px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.25; }
 .product-price { margin-top: 7px; color: #202125; font-size: 16px; font-weight: 850; letter-spacing: -.45px; }
 .stock-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 7px; border-radius: 7px; font-size: 9px; font-weight: 700; }
 .product-card .stock-pill { margin-top: 8px; }
@@ -237,9 +237,11 @@
   .catalog-app .category-section { margin-top: 25px; }
   .catalog-app .section-label-row h2 { font-size: 14px; }
   .catalog-app .section-label-row > span { font-size: 9px; }
-  .catalog-app .category-scroller { grid-template-columns: repeat(6, 105px); gap: 9px; margin-top: 11px; }
-  .catalog-app .category-card { min-height: 60px; gap: 8px; padding: 7px; border-radius: 13px; font-size: 9px; }
-  .catalog-app .category-art { flex-basis: 40px; width: 40px; height: 40px; border-radius: 12px; font-size: 23px; }
+  .catalog-app .category-scroller { display: flex; overflow-x: auto; gap: 9px; margin-top: 11px; padding: 2px 1px 8px; scrollbar-width: none; }
+  .catalog-app .category-scroller::-webkit-scrollbar { display: none; }
+  .catalog-app .category-card { flex: 0 0 auto; min-height: 60px; gap: 8px; padding: 7px 11px 7px 7px; border-radius: 13px; font-size: 9px; }
+  .catalog-app .category-art { flex-basis: 34px; width: 34px; height: 34px; border-radius: 10px; font-size: 20px; }
+  .catalog-app .category-art svg { width: 19px; height: 19px; }
   .catalog-app .products-section { margin-top: 24px; }
   .catalog-app .product-heading { margin-bottom: 10px; }
   .catalog-app .product-heading > div > p { font-size: 9px; }
@@ -276,7 +278,7 @@
   .catalog-app .authorized-fields input { font-size: 16px; } /* >=16px: sin zoom automático en iOS */
   .catalog-app .checkout-sheet h2 { font-size: 23px; }
 }
-@media (max-width: 370px) { .catalog-app .intro-row h1 { font-size: 26px; } .catalog-app .category-scroller { grid-template-columns: repeat(6, 96px); } .catalog-app .category-card { gap: 6px; font-size: 8px; } .catalog-app .product-grid { gap: 8px; } .catalog-app .product-art { height: 90px; } }
+@media (max-width: 370px) { .catalog-app .intro-row h1 { font-size: 26px; } .catalog-app .category-card { gap: 6px; font-size: 8px; } .catalog-app .product-grid { gap: 8px; } .catalog-app .product-art { height: 90px; } }
 @media (prefers-reduced-motion: reduce) { .catalog-app *, .catalog-app *::before, .catalog-app *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 
 /* ---------- Reuso del kit v0 fuera del catálogo (POS, gestión) ---------- */
@@ -284,7 +286,12 @@
    tarjetas, categorías, arte y pills. En el POS el precio va en celeste
    y toda la tarjeta actúa como botón de agregar. */
 .cat-embed { padding-bottom: 0; background: transparent; }
-.cat-embed .category-scroller { margin-top: 0; }
+/* En el POS el panel es angosto en cualquier viewport: el carrusel de
+   categorías scrollea en fila en vez de la grilla de 6 columnas, así
+   las píldoras toman su ancho natural sin recortar textos. */
+.cat-embed .category-scroller { display: flex; overflow-x: auto; gap: 9px; margin-top: 0; padding: 2px 1px 8px; scrollbar-width: none; }
+.cat-embed .category-scroller::-webkit-scrollbar { display: none; }
+.cat-embed .category-card { flex: 0 0 auto; }
 .cat-embed .products-section { margin-top: 18px; }
 .cat-embed .product-price { color: var(--blue); }
 .cat-embed .product-card:active { transform: scale(.97); }
@@ -303,3 +310,62 @@
 }
 .staff-product-meta p { margin: 0; font-size: 11px; color: #6d7280; }
 .staff-product-meta b { color: #202125; font-weight: 700; }
+
+/* ================================================================
+   Legibilidad Android (todas las edades): escala de fuentes
+   normalizada para el catálogo, el ticket POS y los sheets de
+   carrito/retiro. Conserva colores, negritas y estructura del
+   diseño v0; solo sube el piso tipográfico a 13.5px base y 12.5px
+   en metadatos. Al ir al final de la hoja gana por cascada,
+   incluidas las media queries que achicaban a 8-9px.
+   ================================================================ */
+
+/* Cuerpo base, botones y montos: piso 13.5px */
+.catalog-app .search-box input,
+.catalog-app .section-subtitle,
+.catalog-app .empty-search p,
+.catalog-app .empty-search button,
+.catalog-app .product-name,
+.catalog-app .cart-floating strong,
+.catalog-app .cart-total,
+.catalog-app .cart-item-info strong,
+.catalog-app .cart-item > b,
+.catalog-app .cart-total-row,
+.catalog-app .express-button strong,
+.catalog-app .pickup-button strong,
+.catalog-app .pickup-choice strong,
+.catalog-app .pickup-summary,
+.catalog-app .authorized-fields input,
+.catalog-app .detail-description,
+.catalog-app .primary-action { font-size: 13.5px; }
+
+/* Metadatos, fechas y leyendas: piso 12.5px. Las píldoras, badges y
+   steppers compactos (category-card, stock-pill, sort-*, qs-count,
+   cart-badge) conservan su tamaño original: agrandarlos desbordaba
+   los contenedores en 390px. */
+.catalog-app .cart-sheet-head h2 span,
+.catalog-app .cart-empty span,
+.catalog-app .cart-item-info > span,
+.catalog-app .express-button small,
+.catalog-app .pickup-button small,
+.catalog-app .pickup-off,
+.catalog-app .checkout-copy,
+.catalog-app .back-text,
+.catalog-app .pickup-choice small,
+.catalog-app .authorized-fields label,
+.catalog-app .login-prompt,
+.catalog-app .detail-stock small,
+.catalog-app .detail-units,
+.catalog-app .staff-product-meta p,
+.catalog-app .en-pedido-nota,
+.catalog-app .catalog-footer p,
+.catalog-app .catalog-footer > span { font-size: 12.5px; }
+
+/* Píldoras compactas: un leve ajuste de legibilidad sin desbordar
+   el contenedor (originales de 8-10px). */
+.catalog-app .category-card { font-size: 11px; }
+.catalog-app .stock-pill { font-size: 10px; }
+.catalog-app .sort-button,
+.catalog-app .sort-select { font-size: 10.5px; }
+.catalog-app .product-category { font-size: 11px; }
+.catalog-app .section-kicker { font-size: 10.5px; }

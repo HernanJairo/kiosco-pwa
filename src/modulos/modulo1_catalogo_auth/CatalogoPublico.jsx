@@ -336,7 +336,10 @@ export default function CatalogoPublico() {
                       <button
                         className="add-button"
                         aria-label={`Agregar ${p.nombre} al pedido`}
-                        onClick={() => agregarUno(p)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          agregarUno(p)
+                        }}
                       >
                         <Plus size={19} />
                       </button>

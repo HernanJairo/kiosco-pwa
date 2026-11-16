@@ -480,3 +480,98 @@
 .analytics-view .report-disclaimer{font-size:12px;line-height:1.5;text-align:center}
 }
 @media(prefers-reduced-motion:reduce){.analytics-view .analytics-app *, .analytics-view .analytics-app *:before, .analytics-view .analytics-app *:after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* ================================================================
+   Legibilidad Android (todas las edades): escala de fuentes
+   normalizada para Reportes, Inventario y el ABM embebido.
+   Conserva colores, negritas y estructura del diseño v0; solo sube
+   el piso tipográfico a 13.5px base y 12.5px en metadatos. Al ir al
+   final de la hoja gana por cascada, incluidas las media queries
+   que achicaban a 5.5-9px.
+   ================================================================ */
+
+/* Cuerpo base, botones, datos de tabla y montos: piso 13.5px */
+.analytics-view .reports-heading p,
+.analytics-view .inventory-heading p,
+.analytics-view .export-button,
+.analytics-view .primary-button,
+.analytics-view .custom-date-range,
+.analytics-view .bestseller-table td,
+.analytics-view .category-legend-row,
+.analytics-view .category-legend-row>strong,
+.analytics-view .tender-amount,
+.analytics-view .recommendation-card h3,
+.analytics-view .inventory-search input,
+.analytics-view .inventory-name-block h3,
+.analytics-view .inventory-price-row .cost-value strong,
+.analytics-view .inventory-empty strong,
+.analytics-view .inventory-empty p,
+.analytics-view .text-action,
+.analytics-view .product-form label,
+.analytics-view .product-form input,
+.analytics-view .product-form select,
+.analytics-view .secondary-button,
+.analytics-view .danger-button,
+.analytics-view .delete-dialog p,
+.analytics-view .admin-toast,
+.analytics-view .footer-brand { font-size: 13.5px; }
+
+/* Metadatos, leyendas y encabezados de tabla: piso 12.5px */
+.analytics-view .legend-empty,
+.analytics-view .reco-note,
+.analytics-view .reco-empty,
+.analytics-view .table-empty,
+.analytics-view .management-shop-name strong,
+.analytics-view .management-shop-name span,
+.analytics-view .management-account,
+.analytics-view .management-account span,
+.analytics-view .management-account strong,
+.analytics-view .reports-kicker,
+.analytics-view .period-context,
+.analytics-view .custom-date-range label,
+.analytics-view .custom-date-range input,
+.analytics-view .kpi-label,
+.analytics-view .kpi-meta,
+.analytics-view .report-overline,
+.analytics-view .donut-center span,
+.analytics-view .tender-title-line strong,
+.analytics-view .tender-title-line span,
+.analytics-view .tender-footnote,
+.analytics-view .tender-footnote>strong,
+.analytics-view .recommendation-label,
+.analytics-view .pair-products span,
+.analytics-view .pair-products>i,
+.analytics-view .recommendation-result,
+.analytics-view .recommendation-result>strong,
+.analytics-view .slow-product strong,
+.analytics-view .restock-product strong,
+.analytics-view .slow-product small,
+.analytics-view .restock-product small,
+.analytics-view .restock-product>b,
+.analytics-view .bestseller-table th,
+.analytics-view .table-footer,
+.analytics-view .report-disclaimer,
+.analytics-view .inventory-disclaimer,
+.analytics-view .management-footer,
+.analytics-view .inventory-search kbd,
+.analytics-view .inventory-total,
+.analytics-view .results-count,
+.analytics-view .category-name,
+.analytics-view .product-barcode,
+.analytics-view .inventory-price-row>div>span,
+.analytics-view .form-error { font-size: 12.5px; }
+
+/* Píldoras, chips y badges compactos (originales de 6-8px): tamaño
+   moderado — el piso de 12.5-13.5px los desbordaba en 390px. */
+.analytics-view .management-tab { font-size: 11.5px; }
+.analytics-view .period-pill,
+.analytics-view .status-filter { font-size: 11px; }
+.analytics-view .inventory-category-chip { font-size: 11px; }
+.analytics-view .inventory-category-chip>small { font-size: 10px; }
+.analytics-view .insights-badge,
+.analytics-view .promo-chip,
+.analytics-view .margin-chip,
+.analytics-view .stock-badge,
+.analytics-view .expiry-badge,
+.analytics-view .table-category { font-size: 10.5px; }
+.analytics-view .rank-number { font-size: 10px; }

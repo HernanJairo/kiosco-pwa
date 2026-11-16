@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Bell,
+  CalendarDays,
   CheckCheck,
   CheckCircle2,
   ClipboardList,
@@ -63,6 +64,20 @@ const CAT_POR_TIPO = {
 
 const catDe = (n) => n.cat || CAT_POR_TIPO[n.tipo] || 'caja'
 
+// Timestamp de la notificación (createdAt nuevo / fecha histórico).
+const tsDe = (n) => new Date(n.createdAt || n.fecha).getTime() || 0
+
+// Día local en formato input[type=date].
+const isoDia = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// Atajos del filtro de fechas de la bandeja.
+const ATAJOS_FECHA = [
+  { key: 'hoy', label: 'Hoy', dias: 0 },
+  { key: 'semana', label: '7 días', dias: 6 },
+  { key: 'todas', label: 'Todas', dias: null },
+]
+
 // Centro de notificaciones del administrador y "Mi Actividad" del
 // vendedor: mismo feed, pero el vendedor solo ve los eventos que él
 // firmó durante su turno (autor === su nombre de sesión).
@@ -70,6 +85,32 @@ export default function NotificacionesPanel() {
   const { session, notificaciones } = useKiosco()
   const esAdmin = session?.rol === 'admin'
   const [filtro, setFiltro] = useState('todas')
+  const [desde, setDesde] = useState('') // rango de fechas, formato input date
+  const [hasta, setHasta] = useState('')
+  const [atajo, setAtajo] = useState('todas')
+  // El rango manual se esconde tras la píldora "Elegir por fecha":
+  // la barra queda limpia y los inputs no se cortan en 390px.
+  const [fechaOpen, setFechaOpen] = useState(false)
+
+  const aplicarAtajo = (key) => {
+    setAtajo(key)
+    const a = ATAJOS_FECHA.find((x) => x.key === key)
+    if (!a || a.dias === null) {
+      setDesde('')
+      setHasta('')
+      return
+    }
+    const hoy = new Date()
+    const ini = new Date()
+    ini.setDate(hoy.getDate() - a.dias)
+    setDesde(isoDia(ini))
+    setHasta(isoDia(hoy))
+  }
+
+  const cambiarFecha = (setter, v) => {
+    setter(v)
+    setAtajo('custom') // rango manual: ningún atajo marcado
+  }
 
   const feed = useMemo(
     () =>
@@ -102,8 +143,14 @@ export default function NotificacionesPanel() {
 
   const filtradas = useMemo(() => {
     const f = FILTROS.find((x) => x.key === filtro)
-    return f?.cats ? feed.filter((n) => f.cats.includes(catDe(n))) : feed
-  }, [feed, filtro])
+    const base = f?.cats ? feed.filter((n) => f.cats.includes(catDe(n))) : feed
+    const d0 = desde ? new Date(`${desde}T00:00:00`) : null
+    const d1 = hasta ? new Date(`${hasta}T23:59:59.999`) : null
+    // Orden estricto: siempre lo más reciente primero (createdAt DESC).
+    return base
+      .filter((n) => (!d0 || tsDe(n) >= d0) && (!d1 || tsDe(n) <= d1))
+      .sort((a, b) => tsDe(b) - tsDe(a))
+  }, [feed, filtro, desde, hasta])
 
   const noLeidas = feed.filter((n) => !leidas.includes(n.id)).length
   const marcarTodas = () => persistLeidas([...new Set([...leidas, ...feed.map((n) => n.id)])])
@@ -161,6 +208,63 @@ export default function NotificacionesPanel() {
               </button>
             )
           })}
+        </div>
+
+        {/* Filtro por fechas: píldoras limpias (Hoy / 7 días / Todas)
+            y el rango manual escondido tras "Elegir por fecha" para
+            que la barra no se corte en pantallas chicas. */}
+        <div className="mb-4 flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {ATAJOS_FECHA.map((a) => (
+              <button
+                key={a.key}
+                type="button"
+                onClick={() => aplicarAtajo(a.key)}
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-all duration-150 active:scale-95 ${
+                  atajo === a.key
+                    ? 'bg-[#009DE0] text-white shadow-[0_2px_10px_rgba(0,157,224,0.25)]'
+                    : 'bg-[#F6F6F6] text-[#555963] hover:bg-[#EBF7FD] hover:text-[#007AB8]'
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setFechaOpen((v) => !v)}
+              aria-expanded={fechaOpen}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-bold transition-all duration-150 active:scale-95 ${
+                fechaOpen || atajo === 'custom'
+                  ? 'bg-[#009DE0] text-white shadow-[0_2px_10px_rgba(0,157,224,0.25)]'
+                  : 'bg-[#F6F6F6] text-[#555963] hover:bg-[#EBF7FD] hover:text-[#007AB8]'
+              }`}
+            >
+              <CalendarDays size={14} /> Elegir por fecha
+            </button>
+          </div>
+          {fechaOpen && (
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex h-[38px] items-center gap-1.5 rounded-full bg-[#F6F6F6] px-3.5 transition-shadow focus-within:ring-2 focus-within:ring-[#009DE0]/30">
+                <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-400">Desde</span>
+                <input
+                  type="date"
+                  value={desde}
+                  onChange={(e) => cambiarFecha(setDesde, e.target.value)}
+                  className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-slate-700 outline-none"
+                />
+              </label>
+              <label className="flex h-[38px] items-center gap-1.5 rounded-full bg-[#F6F6F6] px-3.5 transition-shadow focus-within:ring-2 focus-within:ring-[#009DE0]/30">
+                <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-slate-400">Hasta</span>
+                <input
+                  type="date"
+                  value={hasta}
+                  min={desde || undefined}
+                  onChange={(e) => cambiarFecha(setHasta, e.target.value)}
+                  className="min-w-0 flex-1 bg-transparent text-[13px] font-semibold text-slate-700 outline-none"
+                />
+              </label>
+            </div>
+          )}
         </div>
 
         {filtradas.length === 0 ? (

@@ -277,7 +277,7 @@ export function desbloquearFiadoDb(db, clienteId) {
 // - Cuenta corriente (fiado): exige cliente con saldo a favor o límite
 //   habilitado; si hay límite, la deuda proyectada no puede superarlo
 //   salvo excepción expresa del vendedor.
-export function validarVenta(db, { items, metodo, clienteId = null, excepcionFiado = false, omitirStock = false }) {
+export function validarVenta(db, { items, metodo, clienteId = null, excepcionFiado = false, excepcionPausa = false, omitirStock = false }) {
   if (!items?.length) throw new Error('El carrito está vacío.')
 
   const porProducto = new Map()
@@ -307,8 +307,10 @@ export function validarVenta(db, { items, metodo, clienteId = null, excepcionFia
     }
   }
   if (metodo === 'fiado') {
-    if (db.config?.fiadosActivos === false) {
-      throw new Error('Los fiados están pausados temporalmente por el kiosco.')
+    // Fiados pausados: solo un admin puede autorizar la excepción
+    // (excepcionPausa); el vendedor cobra por otro método.
+    if (db.config?.fiadosActivos === false && !excepcionPausa) {
+      throw new Error('Los fiados están pausados actualmente.')
     }
     if (!cliente) throw new Error('La venta en cuenta corriente exige seleccionar un cliente registrado.')
     if (cliente.fiadoBloqueado === true) {

@@ -68,27 +68,27 @@ export default function CobranzaClientes() {
             className="w-full rounded-lg border border-transparent bg-[#F6F6F6] py-2 pl-9 pr-3 text-sm focus:border-brand focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-soft"
           />
         </div>
-        <ul className="flex max-h-[420px] flex-col gap-1.5 overflow-y-auto">
+        <ul className="flex max-h-[420px] flex-col gap-2 overflow-y-auto">
           {list.map((al) => (
             <li key={al.id}>
               <button
                 onClick={() => setSel(al.id)}
-                className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                className={`flex min-h-[60px] w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${
                   sel === al.id
                     ? 'border-brand/40 bg-brand-soft ring-1 ring-blue-200'
                     : 'border-slate-200 bg-white hover:border-brand/30'
                 }`}
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-                  <User size={15} />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                  <User size={18} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-800">
+                  <p className="truncate text-base font-bold text-slate-800">
                     {al.nombre} {al.apellido}
                   </p>
-                  <p className="text-[11px] text-slate-400">{al.dni} · DNI {al.dni}</p>
+                  <p className="text-xs text-slate-400">DNI {al.dni}</p>
                 </div>
-                {al.deuda > 0 && <Badge tone="rose">{money(al.deuda)}</Badge>}
+                {al.deuda > 0 && <Badge tone="rose">Debe {money(al.deuda)}</Badge>}
               </button>
             </li>
           ))}
@@ -107,12 +107,12 @@ export default function CobranzaClientes() {
               <StatCard icon={NotebookPen} tone="rose" label="Deuda de fiados" value={money(a.deuda)} sub={`${a.fiados.filter((f) => !f.pagado).length} fiado(s) abierto(s)`} />
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button variant="primary" onClick={() => abrir('recarga')}>
-                <Wallet size={15} /> Cargar saldo (efectivo)
+            <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+              <Button variant="primary" onClick={() => abrir('recarga')} className="min-h-[44px] w-full justify-center sm:w-auto">
+                <Wallet size={16} /> Cargar saldo (efectivo)
               </Button>
-              <Button variant="success" onClick={() => abrir('cobro')} disabled={a.deuda <= 0}>
-                <HandCoins size={15} /> Cobro / abono de deuda
+              <Button variant="success" onClick={() => abrir('cobro')} disabled={a.deuda <= 0} className="min-h-[44px] w-full justify-center sm:w-auto">
+                <HandCoins size={16} /> Cobro / abono de deuda
               </Button>
             </div>
 
@@ -120,16 +120,26 @@ export default function CobranzaClientes() {
               {a.fiados.filter((f) => !f.pagado).length === 0 ? (
                 <EmptyState icon={HandCoins} title="Sin fiados pendientes" sub="La libreta está al día." />
               ) : (
-                <ul className="flex flex-col gap-2">
+                <ul className="flex flex-col gap-2.5">
                   {a.fiados.filter((f) => !f.pagado).map((f) => (
-                    <li key={f.id} className="rounded-xl border border-slate-200 px-4 py-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-slate-400">{fmtFechaHora(f.fecha)}</p>
+                    <li key={f.id} className="rounded-xl bg-white px-4 py-4 shadow-soft">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-bold text-slate-800">Fiado #{f.id.slice(0, 8).toUpperCase()}</p>
                         <Badge tone="amber">Pendiente {money(f.pendiente)}</Badge>
                       </div>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {f.items.map((it) => `${it.cantidad}× ${it.nombre}`).join(' · ')}
-                      </p>
+                      <p className="mt-1 text-xs font-medium text-slate-400">{fmtFechaHora(f.fecha)}</p>
+                      <ul className="mt-2.5 flex flex-col gap-1.5">
+                        {f.items.map((it, i) => (
+                          <li key={i} className="flex justify-between text-sm text-slate-600">
+                            <span>{it.cantidad}× {it.nombre}</span>
+                            <span className="font-medium">{money(it.precio * it.cantidad)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-2 flex justify-between border-t border-dashed border-slate-200 pt-2 text-sm font-bold">
+                        <span>Total fiado</span>
+                        <span className="text-amber-600">{money(f.monto)}</span>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -153,7 +163,7 @@ export default function CobranzaClientes() {
         {a && accion && (
           <form onSubmit={confirmar} className="flex flex-col gap-3">
             <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-inset ring-slate-200">
-              <b>{a.nombre} {a.apellido}</b> · {a.dni} · DNI {a.dni}
+              <b>{a.nombre} {a.apellido}</b> · DNI {a.dni}
               <br />
               Deuda: <b className="text-rose-600">{money(a.deuda)}</b> · Saldo:{' '}
               <b className="text-emerald-600">{money(a.saldo)}</b>
