@@ -81,6 +81,11 @@ export default function LoginPanel() {
         </div>
         <div className="mosaic">
           <div className="mosaic-glow" />
+          <p className="mosaic-slogan">
+            Tu kiosco,
+            <br />
+            <span>al toque.</span>
+          </p>
           {imgOk ? (
             <img
               src="/yapa-snacks.png"

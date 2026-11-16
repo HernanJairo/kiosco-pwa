@@ -23,6 +23,11 @@
 .login-shell .welcome-panel { position: relative; min-height: 100svh; overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 54px clamp(30px, 6vw, 92px); background: #fff; }
 .login-shell .mosaic { position: relative; height: clamp(270px, 42vh, 420px); max-width: 670px; width: 100%; margin: 0 auto; overflow: hidden; border-radius: 30px; background: #f5f7f5; }
 .login-shell .mosaic::after { position: absolute; z-index: 1; content: ''; inset: 48% 0 0; background: linear-gradient(180deg, transparent, rgba(255,255,255,.8)); pointer-events: none; }
+/* Eslogan superpuesto arriba a la izquierda (estilo original en 2
+   líneas: oscura + azul). El velo blanco translúcido + blur lo separa
+   de la ilustración sin pisarla ni perder contraste. */
+.login-shell .mosaic-slogan { position: absolute; z-index: 2; top: 18px; left: 18px; margin: 0; padding: 9px 14px; border-radius: 15px; background: rgba(255,255,255,.78); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 4px 16px rgba(32,33,37,.08); color: #202125; font-size: 18px; font-weight: 850; line-height: 1.15; letter-spacing: -.5px; }
+.login-shell .mosaic-slogan span { color: var(--blue); }
 .login-shell .mosaic-glow { position: absolute; inset: -20%; background: radial-gradient(ellipse at 47% 45%, rgba(255,255,255,0) 15%, rgba(255,255,255,.48) 85%); z-index: 1; pointer-events: none; }
 .login-shell .snack-art { width: 100%; height: 100%; object-fit: cover; display: block; }
 .login-shell .panel-brand { display: flex; align-items: center; gap: 13px; width: 100%; max-width: 670px; margin: 0 auto 22px; }
@@ -142,7 +147,8 @@
   .login-shell .mosaic { height: 205px; width: 100%; margin: 0; border-radius: 0 0 27px 27px; }
   .login-shell .mosaic::after { inset: 65% 0 0; }
   .login-shell .store-card, .login-shell .welcome-note, .login-shell .panel-footnote, .login-shell .panel-brand { display: none; }
-  .login-shell .form-panel { min-height: calc(100svh - 205px); align-items: flex-start; padding: 19px 24px 30px; }
+  .login-shell .mosaic-slogan { top: 14px; left: 14px; font-size: 16px; }
+  .login-shell .form-panel { min-height: calc(100svh - 205px); align-items: flex-start; padding: 19px 24px 30px; overflow-y: visible; }
   .login-shell .form-content { max-width: 480px; margin: auto; }
   .login-shell .form-header { margin-bottom: 17px; }
   .login-shell .brand { margin-bottom: 0; font-size: 24px; }
