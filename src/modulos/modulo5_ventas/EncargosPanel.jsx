@@ -10,6 +10,14 @@ import ProductoImg from '../../components/ui/ProductoImg'
 import SwitchEstado from '../../components/ui/SwitchEstado'
 import RotuloEncargoModal from './RotuloEncargoModal'
 
+// Tonos de la píldora de estado de la cabecera colapsada (mismo
+// lenguaje que Badge, con padding/texto propios de la tarjeta).
+const TONO_PILL = {
+  amber: 'bg-amber-50 text-amber-700 ring-amber-200',
+  brand: 'bg-brand-soft text-brand ring-blue-200',
+  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+}
+
 // Vista dedicada "Encargos" del mostrador (vendedor y admin por igual):
 // cola de pedidos anticipados de clientes para armar la bolsa.
 // Flujo ordenado en 3 secciones colapsables:
@@ -89,34 +97,44 @@ export default function EncargosPanel() {
 
     return (
       <li key={e.id} className="overflow-hidden rounded-3xl bg-white shadow-soft">
-        {/* Cabecera compacta (siempre visible) → toque despliega */}
+        {/* Cabecera compacta en 2 niveles (siempre visible) → toque
+            despliega: arriba N° de pedido + monto, abajo fecha/cliente
+            completa junto a la píldora de estado (flex-wrap, sin
+            truncar ni encimar en pantallas chicas). */}
         <button
           type="button"
           onClick={() => toggle(e.id)}
           aria-expanded={abierto}
-          className="flex w-full items-center justify-between gap-3 bg-[#F6F6F6] px-4 py-3 text-left transition-colors hover:bg-[#EBF7FD]"
+          className="block w-full bg-[#F6F6F6] p-3.5 text-left transition-colors hover:bg-[#EBF7FD]"
         >
-          <div className="flex min-w-0 items-center gap-2.5">
-            <ChevronDown
-              size={15}
-              className={`shrink-0 text-slate-400 transition-transform duration-200 ${abierto ? '' : '-rotate-90'}`}
-            />
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${modo === 'listo' ? 'bg-emerald-400' : modo === 'espera' ? 'bg-amber-400' : 'bg-[#009DE0]'}`} />
-              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${modo === 'listo' ? 'bg-emerald-500' : modo === 'espera' ? 'bg-amber-500' : 'bg-[#009DE0]'}`} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-sm font-bold leading-tight text-slate-800">
+          {/* Fila superior: flecha + punto de estado + N° y monto */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <ChevronDown
+                size={15}
+                className={`shrink-0 text-slate-400 transition-transform duration-200 ${abierto ? '' : '-rotate-90'}`}
+              />
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${modo === 'listo' ? 'bg-emerald-400' : modo === 'espera' ? 'bg-amber-400' : 'bg-[#009DE0]'}`} />
+                <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${modo === 'listo' ? 'bg-emerald-500' : modo === 'espera' ? 'bg-amber-500' : 'bg-[#009DE0]'}`} />
+              </span>
+              <p className="whitespace-nowrap text-sm font-bold leading-tight text-slate-800">
                 Pedido #{e.id.slice(0, 8).toUpperCase()}
               </p>
-              <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                {fmtFechaHora(e.fecha)} · {e.clienteNombre} · {cantItems} ítem{cantItems === 1 ? '' : 's'}
-              </p>
             </div>
+            <span className="shrink-0 text-base font-extrabold text-sky-600">{money(e.total)}</span>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            <span className="text-lg font-bold text-brand">{money(e.total)}</span>
-            <Badge tone={etiquetaEstado.tone}>{etiquetaEstado.text}</Badge>
+          {/* Fila inferior: fecha/hora + cliente + ítems y píldora de
+              estado envolvente, sin pegarse a los bordes. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 pl-9">
+            <span className="text-xs text-slate-500">
+              {fmtFechaHora(e.fecha)} · {e.clienteNombre} · {cantItems} ítem{cantItems === 1 ? '' : 's'}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${TONO_PILL[etiquetaEstado.tone]}`}
+            >
+              {etiquetaEstado.text}
+            </span>
           </div>
         </button>
 

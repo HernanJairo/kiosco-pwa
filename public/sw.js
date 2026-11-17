@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yapa-cache-v23';
+const CACHE_NAME = 'yapa-cache-v24';
 const PRECACHE = ['/', '/index.html', '/manifest.json', '/favicon.svg'];
 
 self.addEventListener('install', (event) => {
