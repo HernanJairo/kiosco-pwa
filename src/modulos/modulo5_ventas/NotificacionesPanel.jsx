@@ -21,6 +21,7 @@ import { fmtFechaHora } from '../../utils/format'
 import Card from '../../components/ui/Card'
 import EstadoServicio from '../../components/ui/EstadoServicio'
 import EmptyState from '../../components/ui/EmptyState'
+import DetalleNotificacionModal from './DetalleNotificacionModal'
 
 // Ícono + tono por tipo de evento (mismo lenguaje que la campanita).
 const ICONO = {
@@ -91,6 +92,7 @@ export default function NotificacionesPanel() {
   // El rango manual se esconde tras la píldora "Elegir por fecha":
   // la barra queda limpia y los inputs no se cortan en 390px.
   const [fechaOpen, setFechaOpen] = useState(false)
+  const [detalle, setDetalle] = useState(null) // notificación abierta en modal
 
   const aplicarAtajo = (key) => {
     setAtajo(key)
@@ -283,29 +285,38 @@ export default function NotificacionesPanel() {
               const meta = ICONO[n.tipo] || ICONO.info
               const leida = leidas.includes(n.id)
               return (
-                <li
-                  key={n.id}
-                  className={`flex items-start gap-3 border-b border-slate-50 py-3 last:border-0 ${
-                    leida ? 'opacity-60' : ''
-                  }`}
-                >
-                  <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${meta.cls}`}>
-                    <meta.Icon size={15} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] leading-snug text-slate-700">{n.texto}</p>
-                    <p className="mt-0.5 text-[11px] text-slate-400">
-                      {fmtFechaHora(n.fecha)}
-                      {n.autor && <> · por <b className="font-semibold">{n.autor}</b></>}
-                    </p>
-                  </div>
-                  {!leida && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />}
+                <li key={n.id} className="border-b border-slate-50 last:border-0">
+                  {/* Toque → modal con el detalle (ticket de venta, encargo…) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      persistLeidas([...new Set([...leidas, n.id])])
+                      setDetalle(n)
+                    }}
+                    className={`flex w-full items-start gap-3 py-3 text-left transition-colors hover:bg-slate-50/70 rounded-lg px-1 -mx-1 ${
+                      leida ? 'opacity-60' : ''
+                    }`}
+                  >
+                    <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${meta.cls}`}>
+                      <meta.Icon size={15} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] leading-snug text-slate-700">{n.texto}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        {fmtFechaHora(n.fecha)}
+                        {n.autor && <> · por <b className="font-semibold">{n.autor}</b></>}
+                      </p>
+                    </div>
+                    {!leida && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />}
+                  </button>
                 </li>
               )
             })}
           </ul>
         )}
       </Card>
+
+      <DetalleNotificacionModal notif={detalle} open={!!detalle} onClose={() => setDetalle(null)} />
     </div>
   )
 }

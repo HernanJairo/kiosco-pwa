@@ -612,6 +612,10 @@ export function nuevoEncargo(db, { clienteId, items, retiroTercero = null }) {
     preparadoEn: null,
     retiradoPor: null,
     entregadoEn: null,
+    // Asignación exclusiva: qué vendedor tomó el pedido para armarlo.
+    // Evita que dos cajas preparen la misma bolsa a la vez.
+    asignadoA: null,
+    asignadoEn: null,
   }
   if (!Array.isArray(db.encargos)) db.encargos = []
   db.encargos.unshift(encargo)
@@ -676,6 +680,19 @@ export function buscarEncargoListoPorDni(db, dni) {
     ? `${e.clienteNombre} (titular)`
     : `${e.retiroTercero.nombre} (autorizado · DNI ${d})`
   return { encargo: e, retiradoPor }
+}
+
+// Asignación exclusiva: el vendedor toma el pedido de la cola "en
+// espera" y queda como único responsable de armarlo. Rechaza si ya
+// tiene dueño (evita que dos vendedores agarren la misma bolsa).
+export function tomarEncargoDb(db, encargoId, quien) {
+  const e = (db.encargos || []).find((x) => x.id === encargoId)
+  if (!e) throw new Error('Encargo no encontrado.')
+  if (e.estado !== 'en_preparacion') throw new Error('El encargo ya no está en preparación.')
+  if (e.asignadoA?.nombre) throw new Error(`El pedido ya lo está armando ${e.asignadoA.nombre}.`)
+  e.asignadoA = quien
+  e.asignadoEn = new Date().toISOString()
+  return e
 }
 
 export function marcarEncargoListoDb(db, encargoId, { preparadoPor }) {

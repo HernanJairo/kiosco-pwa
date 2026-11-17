@@ -220,6 +220,24 @@ export function anularVentaAtomica({ ventaId, clienteDoc = null }) {
   })
 }
 
+// Asignación exclusiva de encargo: relee el doc remoto y aborta si otro
+// vendedor ya tomó el pedido — dos cajas nunca arman la misma bolsa.
+export function asignarEncargoAtomico(encargoId, quien) {
+  return runTransaction(db, async (tx) => {
+    const eRef = doc(db, COLECCIONES.encargos, String(encargoId))
+    const eSnap = await tx.get(eRef)
+    if (!eSnap.exists()) throw new Error('Encargo no encontrado en el servidor.')
+    const remoto = eSnap.data()
+    if (remoto.estado !== 'en_preparacion') {
+      throw new Error('El encargo ya no está en preparación.')
+    }
+    if (remoto.asignadoA?.nombre) {
+      throw new Error(`El pedido ya lo está armando ${remoto.asignadoA.nombre}.`)
+    }
+    tx.update(eRef, { asignadoA: quien, asignadoEn: new Date().toISOString() })
+  })
+}
+
 // Cancelación de encargo: relee el encargo remoto y aborta si ya fue
 // cerrado; devuelve la reserva con increment() (atómico en servidor).
 export function cancelarEncargoAtomico(encargoId) {

@@ -263,6 +263,13 @@ await shot('m3-pos-plus')
 
 // Contingencia: el vendedor pausa los fiados desde "Mi Actividad".
 await irTab('mi actividad', 'estado del servicio')
+// Cantidad previa de notifs "fiados pausados" en el feed: la base
+// remota comparte corridas de QA, así que el check es delta (prev+1).
+const liFiadoPausados = () =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('ul li')].filter((li) => /fiados pausados/i.test(li.textContent)).length
+  )
+const prevFiados = await liFiadoPausados()
 ok(
   await page.evaluate(() => {
     const p = [...document.querySelectorAll('p')].find((x) => /fiados \(cta/i.test(x.textContent))
@@ -275,11 +282,9 @@ ok(
 )
 ok(await esperaTexto('pausados', 10000), 'fiados quedaron en "Pausados"')
 await sleep(800)
-// Deduplicación: el toggle debe dejar UNA sola notificación limpia,
-// no un par admin+staff redundante.
-const notifsFiado = await page.evaluate(() =>
-  [...document.querySelectorAll('ul li')].filter((li) => /fiados pausados/i.test(li.textContent)).length
-)
+// Deduplicación: el toggle debe dejar UNA sola notificación limpia
+// nueva, no un par admin+staff redundante.
+const notifsFiado = (await liFiadoPausados()) - prevFiados
 ok(notifsFiado === 1, `una sola notif limpia por el toggle (${notifsFiado})`)
 ok(await esperaTexto('fiados pausados · por marcos mostrador (vendedor)', 6000), 'texto de notif unificado "· por Nombre (rol)"')
 
@@ -375,9 +380,22 @@ ok(
 )
 await sleep(900)
 
-// Procesar el encargo del cliente: "Marcar listo" genera un evento
-// propio del vendedor para su feed de actividad.
+// Procesar el encargo del cliente: la tarjeta está colapsada y el
+// pedido nuevo arranca "En espera (sin asignar)" — hay que tomarlo
+// antes de poder marcarlo listo (asignación exclusiva por vendedor).
 await irTab('encargos', 'pedidos por armar')
+ok(
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find((x) => /sin asignar/i.test(x.textContent))
+    b?.click()
+    return !!b
+  }),
+  'vendedor desplegó la tarjeta del encargo en espera'
+)
+await sleep(400)
+ok(await clickTexto('tomar pedido'), 'vendedor tomó el pedido (asignación exclusiva)')
+ok(await esperaTexto('seleccionado por marcos', 8000), 'el encargo quedó asignado al vendedor')
+await sleep(600)
 ok(await clickTexto('marcar listo'), 'vendedor marca el encargo como listo')
 await sleep(900)
 ok(await anchoOK(), 'Encargos sin overflow horizontal')
@@ -578,8 +596,14 @@ ok(await anchoOK(), 'Reportes sin overflow horizontal')
 await shot('m7-reportes-tipografia')
 
 // El admin cobra en caja el encargo que el vendedor dejó listo: cierra
-// el ciclo real y deja la cola vacía al terminar el QA.
+// el ciclo real y deja la cola vacía al terminar el QA. La tarjeta es
+// colapsable: hay que desplegarla para llegar al botón.
 await irTab('encargos', 'pedidos por armar')
+await page.evaluate(() => {
+  const b = [...document.querySelectorAll('button')].find((x) => /listo para retirar/i.test(x.textContent))
+  b?.click()
+})
+await sleep(400)
 if (await clickTexto('cobrar en caja')) {
   ok(true, 'admin abrió "Cobrar en caja" del encargo listo')
   await sleep(1200)

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Loader2, Minus, PackageCheck, Printer, ShoppingCart, Trash2 } from 'lucide-react'
+import { ChevronDown, Hand, Loader2, Lock, Minus, PackageCheck, Printer, ShoppingCart, Trash2 } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { fmtFechaHora, money } from '../../utils/format'
 import Badge from '../../components/ui/Badge'
@@ -12,22 +12,35 @@ import RotuloEncargoModal from './RotuloEncargoModal'
 
 // Vista dedicada "Encargos" del mostrador (vendedor y admin por igual):
 // cola de pedidos anticipados de clientes para armar la bolsa.
-// El cobro/despacho se hace escaneando el QR de retiro en el POS o
-// tocando "Cobrar en caja", que navega al POS con el pedido cargado.
+// Flujo ordenado en 3 secciones colapsables:
+//   1) En espera (sin asignar) → cualquiera toma el pedido con "Tomar
+//      pedido" (asignación exclusiva: la tx remota aborta si otro lo
+//      agarró primero).
+//   2) En preparación → solo el vendedor que lo seleccionó (o un admin)
+//      ve los botones; al resto le figura "Atendiendo: <nombre>".
+//   3) Listos para retirar → indica quién lo preparó; el cobro/despacho
+//      se hace escaneando el QR de retiro en el POS o con "Cobrar en caja".
 export default function EncargosPanel() {
   const {
-    productos, encargos, config, updateConfig,
-    marcarEncargoListo, cancelarEncargo, ajustarItemEncargo, notify,
+    productos, encargos, config, updateConfig, session,
+    tomarEncargo, marcarEncargoListo, cancelarEncargo, ajustarItemEncargo, notify,
   } = useKiosco()
   const [busy, setBusy] = useState(false)
   const [rotuloEncargo, setRotuloEncargo] = useState(null) // encargo a imprimir
+  const [abiertos, setAbiertos] = useState({}) // acordeón: ids desplegados
+
+  const esAdmin = session?.rol === 'admin'
 
   const cola = useMemo(
     () => (encargos || []).filter((e) => e.estado === 'en_preparacion' || e.estado === 'listo_retiro'),
     [encargos]
   )
-  const enPreparacion = cola.filter((e) => e.estado === 'en_preparacion').length
-  const listos = cola.filter((e) => e.estado === 'listo_retiro').length
+  // Secciones del flujo: sin dueño → tomados en preparación → listos.
+  const enEspera = cola.filter((e) => e.estado === 'en_preparacion' && !e.asignadoA?.nombre)
+  const seleccionados = cola.filter((e) => e.estado === 'en_preparacion' && e.asignadoA?.nombre)
+  const listosRetiro = cola.filter((e) => e.estado === 'listo_retiro')
+
+  const toggle = (id) => setAbiertos((m) => ({ ...m, [id]: !m[id] }))
 
   const ejecutar = async (fn, okMsg, info = false) => {
     setBusy(true)
@@ -59,11 +72,211 @@ export default function EncargosPanel() {
     notify(`Pedido #${e.id.slice(0, 8).toUpperCase()} enviado a caja para cobrar.`, 'info')
   }
 
+  // Tarjeta colapsable: compacta por defecto (N°, hora, cliente, ítems,
+  // total, estado) y despliega el detalle + acciones al tocarla.
+  const renderEncargo = (e, modo) => {
+    const abierto = !!abiertos[e.id]
+    const cantItems = e.items.reduce((s, i) => s + i.cantidad, 0)
+    // Exclusividad: en preparación solo opera quien lo tomó (o el admin).
+    const mio = esAdmin || e.asignadoA?.id === session?.id
+    const puedeEditar = modo === 'seleccionado' && mio
+    const etiquetaEstado =
+      modo === 'espera'
+        ? { tone: 'amber', text: 'En espera · sin asignar' }
+        : modo === 'seleccionado'
+          ? { tone: 'brand', text: `Seleccionado por ${e.asignadoA.nombre}` }
+          : { tone: 'emerald', text: `Preparado por ${e.preparadoPor || e.asignadoA?.nombre || 'mostrador'} · Listo para retirar` }
+
+    return (
+      <li key={e.id} className="overflow-hidden rounded-3xl bg-white shadow-soft">
+        {/* Cabecera compacta (siempre visible) → toque despliega */}
+        <button
+          type="button"
+          onClick={() => toggle(e.id)}
+          aria-expanded={abierto}
+          className="flex w-full items-center justify-between gap-3 bg-[#F6F6F6] px-4 py-3 text-left transition-colors hover:bg-[#EBF7FD]"
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <ChevronDown
+              size={15}
+              className={`shrink-0 text-slate-400 transition-transform duration-200 ${abierto ? '' : '-rotate-90'}`}
+            />
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${modo === 'listo' ? 'bg-emerald-400' : modo === 'espera' ? 'bg-amber-400' : 'bg-[#009DE0]'}`} />
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${modo === 'listo' ? 'bg-emerald-500' : modo === 'espera' ? 'bg-amber-500' : 'bg-[#009DE0]'}`} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-bold leading-tight text-slate-800">
+                Pedido #{e.id.slice(0, 8).toUpperCase()}
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                {fmtFechaHora(e.fecha)} · {e.clienteNombre} · {cantItems} ítem{cantItems === 1 ? '' : 's'}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <span className="text-lg font-bold text-brand">{money(e.total)}</span>
+            <Badge tone={etiquetaEstado.tone}>{etiquetaEstado.text}</Badge>
+          </div>
+        </button>
+
+        {/* Detalle desplegado: ítems, faltantes, tercero y acciones */}
+        {abierto && (
+          <>
+            <ul className="flex flex-col divide-y divide-slate-50 px-4">
+              {e.items.map((it) => {
+                const p = productos.find((x) => x.id === it.productoId)
+                return (
+                  <li key={`${e.id}-${it.productoId}`} className="flex items-center gap-3 py-2.5">
+                    {p ? (
+                      <ProductoImg producto={p} className="h-10 w-10 rounded-lg" iconSize={16} />
+                    ) : (
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                        <ShoppingCart size={16} />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-slate-700">{it.nombre}</span>
+                      <span className="text-[11px] text-slate-400">{money(it.precio)} c/u</span>
+                    </span>
+                    {/* Falta físico en góndola → quitar del pedido
+                        (solo quien lo está armando, o el admin) */}
+                    {puedeEditar ? (
+                      <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[#F6F6F6] p-1">
+                        <button
+                          type="button"
+                          onClick={() => ajustar(e, it.productoId, 1)}
+                          aria-label={`Quitar uno de ${it.nombre}`}
+                          className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm transition-all duration-150 active:scale-90"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span className="min-w-6 text-center text-sm font-bold text-slate-800">{it.cantidad}</span>
+                        <button
+                          type="button"
+                          onClick={() => ajustar(e, it.productoId, it.cantidad)}
+                          aria-label={`Quitar todo ${it.nombre}`}
+                          title="Sin stock en góndola"
+                          className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-rose-400 shadow-sm transition-all duration-150 hover:bg-rose-50 active:scale-90"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </span>
+                    ) : (
+                      <Badge tone="brand" className="shrink-0 rounded-full">{it.cantidad}×</Badge>
+                    )}
+                    <span className="w-16 shrink-0 text-right text-sm font-semibold text-slate-700">
+                      {money(it.precio * it.cantidad)}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+
+            {/* Aviso de faltantes descontados en góndola */}
+            {(e.itemsFaltantes || []).length > 0 && (
+              <div className="mx-4 mb-2 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700">
+                Sin stock en góndola se descontó: {e.itemsFaltantes.map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')}.
+              </div>
+            )}
+
+            {e.retiroTercero?.dni && (
+              <p className="mx-4 mb-2 rounded-xl bg-[#EBF7FD] px-3 py-2 text-[11px] font-semibold text-[#007AB8]">
+                Retira autorizado: {e.retiroTercero.nombre} · DNI {e.retiroTercero.dni}
+              </p>
+            )}
+
+            {/* Acciones según la sección y la asignación exclusiva */}
+            <div className="flex gap-2 px-4 pb-4 pt-3">
+              {modo === 'espera' && (
+                <Button
+                  className="flex-1 rounded-2xl py-3 text-sm font-bold"
+                  disabled={busy}
+                  onClick={() =>
+                    ejecutar(
+                      () => tomarEncargo(e.id),
+                      `Tomaste el pedido #${e.id.slice(0, 8).toUpperCase()}: quedó asignado a tu turno.`
+                    )
+                  }
+                >
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : <Hand size={16} />}
+                  Tomar pedido
+                </Button>
+              )}
+              {modo === 'seleccionado' && (
+                mio ? (
+                  <Button
+                    className="flex-1 rounded-2xl py-3 text-sm font-bold"
+                    disabled={busy}
+                    onClick={() =>
+                      ejecutar(
+                        () => marcarEncargoListo(e.id),
+                        `Pedido #${e.id.slice(0, 8).toUpperCase()} listo para retirar.`
+                      )
+                    }
+                  >
+                    {busy ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />}
+                    Marcar listo para retirar
+                  </Button>
+                ) : (
+                  <p className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#F6F6F6] py-3 text-[12px] font-bold text-slate-400">
+                    <Lock size={14} /> Atendiendo: {e.asignadoA.nombre}
+                  </p>
+                )
+              )}
+              {modo === 'listo' && (
+                <div className="flex flex-1 gap-2">
+                  <Button
+                    className="flex-1 rounded-2xl py-3 text-sm font-bold"
+                    onClick={() => cobrarEnCaja(e)}
+                    title="Llevar el pedido al ticket del POS para cobrar"
+                  >
+                    <ShoppingCart size={15} /> Cobrar en caja
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setRotuloEncargo(e)}
+                    className="shrink-0 rounded-2xl"
+                    title="Imprimir rótulo para la bolsa"
+                  >
+                    <Printer size={15} /> Rótulo
+                  </Button>
+                </div>
+              )}
+              {/* Cancelar: en seleccionados solo quien lo tomó (o admin) */}
+              {(modo !== 'seleccionado' || mio) && (
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => ejecutar(() => cancelarEncargo(e.id), 'Encargo cancelado.', true)}
+                  className="rounded-2xl bg-rose-50 text-rose-500 hover:bg-rose-100"
+                >
+                  <Trash2 size={14} /> Cancelar
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </li>
+    )
+  }
+
+  // Encabezado de cada sección del flujo con su contador.
+  const tituloSeccion = (texto, cant, dot) =>
+    cant > 0 && (
+      <div className="mt-2 flex items-center gap-2 first:mt-0">
+        <span className={`h-2 w-2 rounded-full ${dot}`} />
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+          {texto} · {cant}
+        </p>
+      </div>
+    )
+
   return (
     <div className="flex flex-col gap-4">
       <Card
         title="Pedidos por Armar"
-        subtitle={`${enPreparacion} en preparación · ${listos} listos para retirar`}
+        subtitle={`${enEspera.length} en espera · ${seleccionados.length} en preparación · ${listosRetiro.length} listos para retirar`}
       >
         {/* Switch de recepción: habilita/cierra la llegada de encargos nuevos */}
         <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-[#F6F6F6] px-4 py-3">
@@ -88,144 +301,28 @@ export default function EncargosPanel() {
             sub="Cuando un cliente envíe un encargo va a aparecer acá."
           />
         ) : (
-          <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {cola.map((e) => (
-              <li key={e.id} className="overflow-hidden rounded-3xl bg-white shadow-soft">
-                {/* Encabezado: orden, cliente y total */}
-                <div className="flex items-center justify-between gap-3 bg-[#F6F6F6] px-4 py-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="relative flex h-2.5 w-2.5 shrink-0">
-                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${e.estado === 'listo_retiro' ? 'bg-emerald-400' : 'bg-[#009DE0]'}`} />
-                      <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${e.estado === 'listo_retiro' ? 'bg-emerald-500' : 'bg-[#009DE0]'}`} />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold leading-tight text-slate-800">
-                        Pedido #{e.id.slice(0, 8).toUpperCase()}
-                      </p>
-                      <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                        {fmtFechaHora(e.fecha)} · {e.clienteNombre}
-                        {e.preparadoPor ? ` · Armó ${e.preparadoPor}` : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="text-lg font-bold text-brand">{money(e.total)}</span>
-                    <Badge tone={e.estado === 'listo_retiro' ? 'emerald' : 'brand'}>
-                      {e.estado === 'listo_retiro' ? 'Listo para retirar' : 'En preparación'}
-                    </Badge>
-                  </div>
-                </div>
+          <div className="flex flex-col gap-3">
+            {tituloSeccion('En espera (sin asignar)', enEspera.length, 'bg-amber-500')}
+            {enEspera.length > 0 && (
+              <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {enEspera.map((e) => renderEncargo(e, 'espera'))}
+              </ul>
+            )}
 
-                {/* Ítems con foto y cantidad (editables mientras se arma) */}
-                <ul className="flex flex-col divide-y divide-slate-50 px-4">
-                  {e.items.map((it) => {
-                    const p = productos.find((x) => x.id === it.productoId)
-                    return (
-                      <li key={`${e.id}-${it.productoId}`} className="flex items-center gap-3 py-2.5">
-                        {p ? (
-                          <ProductoImg producto={p} className="h-10 w-10 rounded-lg" iconSize={16} />
-                        ) : (
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                            <ShoppingCart size={16} />
-                          </span>
-                        )}
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-slate-700">{it.nombre}</span>
-                          <span className="text-[11px] text-slate-400">{money(it.precio)} c/u</span>
-                        </span>
-                        {/* Falta físico en góndola → quitar del pedido */}
-                        {e.estado === 'en_preparacion' ? (
-                          <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-[#F6F6F6] p-1">
-                            <button
-                              type="button"
-                              onClick={() => ajustar(e, it.productoId, 1)}
-                              aria-label={`Quitar uno de ${it.nombre}`}
-                              className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm transition-all duration-150 active:scale-90"
-                            >
-                              <Minus size={12} />
-                            </button>
-                            <span className="min-w-6 text-center text-sm font-bold text-slate-800">{it.cantidad}</span>
-                            <button
-                              type="button"
-                              onClick={() => ajustar(e, it.productoId, it.cantidad)}
-                              aria-label={`Quitar todo ${it.nombre}`}
-                              title="Sin stock en góndola"
-                              className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-rose-400 shadow-sm transition-all duration-150 hover:bg-rose-50 active:scale-90"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          </span>
-                        ) : (
-                          <Badge tone="brand" className="shrink-0 rounded-full">{it.cantidad}×</Badge>
-                        )}
-                        <span className="w-16 shrink-0 text-right text-sm font-semibold text-slate-700">
-                          {money(it.precio * it.cantidad)}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
+            {tituloSeccion('En preparación (seleccionados)', seleccionados.length, 'bg-[#009DE0]')}
+            {seleccionados.length > 0 && (
+              <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {seleccionados.map((e) => renderEncargo(e, 'seleccionado'))}
+              </ul>
+            )}
 
-                {/* Aviso de faltantes descontados en góndola */}
-                {(e.itemsFaltantes || []).length > 0 && (
-                  <div className="mx-4 mb-2 rounded-xl bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-700">
-                    Sin stock en góndola se descontó: {e.itemsFaltantes.map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')}.
-                  </div>
-                )}
-
-                {e.retiroTercero?.dni && (
-                  <p className="mx-4 mb-2 rounded-xl bg-[#EBF7FD] px-3 py-2 text-[11px] font-semibold text-[#007AB8]">
-                    Retira autorizado: {e.retiroTercero.nombre} · DNI {e.retiroTercero.dni}
-                  </p>
-                )}
-
-                {/* Acciones */}
-                <div className="flex gap-2 px-4 pb-4 pt-3">
-                  {e.estado === 'en_preparacion' ? (
-                    <Button
-                      className="flex-1 rounded-2xl py-3 text-sm font-bold"
-                      disabled={busy}
-                      onClick={() =>
-                        ejecutar(
-                          () => marcarEncargoListo(e.id),
-                          `Pedido #${e.id.slice(0, 8).toUpperCase()} listo para retirar.`
-                        )
-                      }
-                    >
-                      {busy ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />}
-                      Marcar listo para retirar
-                    </Button>
-                  ) : (
-                    <div className="flex flex-1 gap-2">
-                      <Button
-                        className="flex-1 rounded-2xl py-3 text-sm font-bold"
-                        onClick={() => cobrarEnCaja(e)}
-                        title="Llevar el pedido al ticket del POS para cobrar"
-                      >
-                        <ShoppingCart size={15} /> Cobrar en caja
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => setRotuloEncargo(e)}
-                        className="shrink-0 rounded-2xl"
-                        title="Imprimir rótulo para la bolsa"
-                      >
-                        <Printer size={15} /> Rótulo
-                      </Button>
-                    </div>
-                  )}
-                  <Button
-                    variant="secondary"
-                    disabled={busy}
-                    onClick={() => ejecutar(() => cancelarEncargo(e.id), 'Encargo cancelado.', true)}
-                    className="rounded-2xl bg-rose-50 text-rose-500 hover:bg-rose-100"
-                  >
-                    <Trash2 size={14} /> Cancelar
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
+            {tituloSeccion('Listos para retirar', listosRetiro.length, 'bg-emerald-500')}
+            {listosRetiro.length > 0 && (
+              <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {listosRetiro.map((e) => renderEncargo(e, 'listo'))}
+              </ul>
+            )}
+          </div>
         )}
       </Card>
 

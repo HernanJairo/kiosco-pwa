@@ -31,9 +31,14 @@ import Input from '../ui/Input'
 import AvatarPersonal from '../ui/AvatarPersonal'
 import SwitchEstado from '../ui/SwitchEstado'
 import AcercaDeModal from '../AcercaDeModal'
+import DetalleNotificacionModal from '../../modulos/modulo5_ventas/DetalleNotificacionModal'
 
 const ROL_LABEL = { cliente: 'Cliente', vendedor: 'Vendedor', admin: 'Admin' }
 const ROLES_MOSTRADOR = ['vendedor', 'admin']
+
+// Pestañas del centro: las ventas cobradas van aparte para no tapar los
+// avisos operativos (PIN, encargos, stock, apertura/cierre…).
+const esNotifVenta = (n) => n.cat === 'ventas' || n.tipo === 'venta' || n.tipo === 'consumo'
 
 // Isotipo oficial de Yapa (el mismo del login v0): cuadrado celeste
 // inclinado -4° con la "Y" blanca en negrita.
@@ -82,6 +87,8 @@ export default function TopBar({ onMenu }) {
   const [acercaOpen, setAcercaOpen] = useState(false)
   const [perfilOpen, setPerfilOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
+  const [tabNotif, setTabNotif] = useState('general') // 'general' | 'ventas'
+  const [detalleNotif, setDetalleNotif] = useState(null) // notif abierta en modal
 
   const puedeAlternar = ROLES_MOSTRADOR.includes(session?.rol)
   // Integrante del equipo logueado (el cliente no tiene ficha en personal).
@@ -142,7 +149,17 @@ export default function TopBar({ onMenu }) {
     }
   }
   const noLeidas = feed.filter((n) => !leidas.includes(n.id)).length
+  // Contadores por pestaña: cada una marca solo lo suyo.
+  const noLeidasGeneral = feed.filter((n) => !esNotifVenta(n) && !leidas.includes(n.id)).length
+  const noLeidasVentas = feed.filter((n) => esNotifVenta(n) && !leidas.includes(n.id)).length
+  const feedTab = feed.filter((n) => (tabNotif === 'ventas' ? esNotifVenta(n) : !esNotifVenta(n)))
   const marcarTodas = () => persistLeidas([...new Set([...leidas, ...feed.map((n) => n.id)])])
+  // Al abrir el detalle la notificación queda leída para este usuario.
+  const abrirDetalle = (n) => {
+    persistLeidas([...new Set([...leidas, n.id])])
+    setNotifOpen(false)
+    setDetalleNotif(n)
+  }
   /* -------------------------------------------- */
 
   // Al abrir la campanita el scroll arranca arriba: lo primero que se
@@ -350,6 +367,36 @@ export default function TopBar({ onMenu }) {
                     </button>
                   )}
                 </div>
+                {/* Pestañas: General (operativo) vs Ventas (cobros),
+                    cada una con su propio contador de no leídas. */}
+                <div className="flex gap-2 border-b border-slate-100 px-4 py-2.5">
+                  {[
+                    { key: 'general', label: 'General', n: noLeidasGeneral },
+                    { key: 'ventas', label: 'Ventas', n: noLeidasVentas },
+                  ].map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTabNotif(t.key)}
+                      className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all duration-150 active:scale-95 ${
+                        tabNotif === t.key
+                          ? 'bg-[#009DE0] text-white shadow-[0_2px_10px_rgba(0,157,224,0.25)]'
+                          : 'bg-[#F6F6F6] text-[#555963] hover:bg-[#EBF7FD] hover:text-[#007AB8]'
+                      }`}
+                    >
+                      {t.label}
+                      {t.n > 0 && (
+                        <span
+                          className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                            tabNotif === t.key ? 'bg-white/25 text-white' : 'bg-rose-100 text-rose-600'
+                          }`}
+                        >
+                          {t.n}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
                 {puedeAlternar && pendientes.length > 0 && (
                   <button
                     onClick={() => { setNotifOpen(false); setSolicitudesOpen(true) }}
@@ -360,37 +407,41 @@ export default function TopBar({ onMenu }) {
                   </button>
                 )}
                 <div ref={notifScrollRef} className="max-h-[24rem] overflow-y-auto">
-                  {feed.length === 0 ? (
+                  {feedTab.length === 0 ? (
                     <EmptyState
                       icon={PackageOpen}
-                      title="Sin notificaciones"
-                      sub="Acá vas a ver acreditaciones, consumos y alertas."
+                      title={tabNotif === 'ventas' ? 'Sin ventas registradas' : 'Sin notificaciones'}
+                      sub={tabNotif === 'ventas' ? 'Los cobros del mostrador van a aparecer acá.' : 'Acá vas a ver acreditaciones, pedidos y alertas.'}
                     />
                   ) : (
                     <ul className="flex flex-col">
-                      {feed.map((n) => {
+                      {feedTab.map((n) => {
                         const meta = NOTIF_ICON[n.tipo] || NOTIF_ICON.info
                         const Icon = meta.icon
                         const leida = leidas.includes(n.id)
                         return (
-                          <li
-                            key={n.id}
-                            className={`flex items-start gap-3 border-b border-slate-50 px-4 py-3 last:border-0 ${
-                              leida ? 'opacity-60' : 'bg-brand-soft/50'
-                            }`}
-                          >
-                            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
-                              <Icon size={15} />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[13px] leading-snug text-slate-700">{n.texto}</p>
-                              <p className="mt-0.5 text-[11px] text-slate-400">
-                                {n.viva
-                                  ? `Alerta vigente${n.fecha ? ` · ${fmtFechaHora(n.fecha)}` : ''}`
-                                  : fmtFechaHora(n.fecha)}
-                              </p>
-                            </div>
-                            {!leida && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />}
+                          <li key={n.id} className="border-b border-slate-50 last:border-0">
+                            {/* Toque → modal con el detalle completo del evento */}
+                            <button
+                              type="button"
+                              onClick={() => abrirDetalle(n)}
+                              className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 ${
+                                leida ? 'opacity-60' : 'bg-brand-soft/50'
+                              }`}
+                            >
+                              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${meta.bg}`}>
+                                <Icon size={15} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] leading-snug text-slate-700">{n.texto}</p>
+                                <p className="mt-0.5 text-[11px] text-slate-400">
+                                  {n.viva
+                                    ? `Alerta vigente${n.fecha ? ` · ${fmtFechaHora(n.fecha)}` : ''}`
+                                    : fmtFechaHora(n.fecha)}
+                                </p>
+                              </div>
+                              {!leida && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />}
+                            </button>
                           </li>
                         )
                       })}
@@ -467,6 +518,14 @@ export default function TopBar({ onMenu }) {
       <Modal open={perfilOpen} onClose={() => setPerfilOpen(false)} title="Mi Perfil">
         {perfilOpen && yo && <FormMiPerfil persona={yo} />}
       </Modal>
+
+      {/* Detalle completo de la notificación tocada (ticket de venta,
+          encargo o evento administrativo). */}
+      <DetalleNotificacionModal
+        notif={detalleNotif}
+        open={!!detalleNotif}
+        onClose={() => setDetalleNotif(null)}
+      />
     </>
   )
 }

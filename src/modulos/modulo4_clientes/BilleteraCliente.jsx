@@ -111,6 +111,13 @@ export default function BilleteraCliente() {
 
   const irTab = (key) => window.dispatchEvent(new CustomEvent('yapa:nav', { detail: key }))
 
+  // "Pagar fiado": con deuda abre el modal autocompletado con el total
+  // (editable para pago parcial); sin deuda no tiene sentido abrirlo.
+  const pagarFiado = () => {
+    if (a.deuda > 0) return setPagoTipo('deuda')
+    notify('¡Estás al día! No tenés deudas de fiado pendientes.', 'info')
+  }
+
   return (
     <div className="wallet-app">
       <div className="wallet-shell">
@@ -203,19 +210,16 @@ export default function BilleteraCliente() {
               <span className="balance-glint" aria-hidden="true"><Sparkles size={15} /></span>
             </article>
 
-            {/* Acciones rápidas reales: recarga, pago de deuda y carnet */}
+            {/* Acciones rápidas reales: recarga libre y pago de deuda
+                (autocompleta el total fiado; sin deuda avisa que está al día) */}
             <section className="quick-actions" aria-label="Acciones rápidas">
               <button type="button" onClick={() => setPagoTipo('recarga')}>
                 <span className="quick-icon quick-blue"><Plus size={19} /></span>
                 <strong>Cargar saldo</strong>
               </button>
-              <button type="button" onClick={() => setPagoTipo('deuda')}>
+              <button type="button" onClick={pagarFiado}>
                 <span className="quick-icon quick-lilac"><HandCoins size={19} /></span>
                 <strong>Pagar fiado</strong>
-              </button>
-              <button type="button" onClick={() => irTab('carnet')}>
-                <span className="quick-icon quick-green"><QrCode size={18} /></span>
-                <strong>Pagar en caja</strong>
               </button>
             </section>
 

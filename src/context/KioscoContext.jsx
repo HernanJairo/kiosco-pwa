@@ -205,16 +205,19 @@ export function KioscoProvider({ children }) {
   // TopBar + panel de Actividad). `para` es 'staff', 'admin' o
   // 'cliente:<id>'; `cat` agrupa el feed del admin ('ventas', 'pedidos',
   // 'stock', 'clientes', 'caja'); `autor` deja firmada la acción para la
-  // auditoría de sesión del vendedor.
-  const avisar = (n, para, texto, tipo = 'info', cat = null, autor = null) => {
+  // auditoría de sesión del vendedor. `meta` adjunta referencias al
+  // documento de origen (ventaId, encargoId…) para abrir el detalle
+  // completo al tocar la notificación.
+  const avisar = (n, para, texto, tipo = 'info', cat = null, autor = null, meta = null) => {
     if (!Array.isArray(n.notificaciones)) n.notificaciones = []
-    const notif = { id: uid(), fecha: new Date().toISOString(), para, texto, tipo, cat, autor }
+    const notif = { id: uid(), fecha: new Date().toISOString(), para, texto, tipo, cat, autor, ...(meta || {}) }
     n.notificaciones.unshift(notif)
     colaNotifs.current.push(notif)
     if (n.notificaciones.length > 200) n.notificaciones.length = 200
   }
 
-  const avisarCliente = (n, cliente, texto, tipo) => avisar(n, `cliente:${cliente.id}`, texto, tipo)
+  const avisarCliente = (n, cliente, texto, tipo, meta = null) =>
+    avisar(n, `cliente:${cliente.id}`, texto, tipo, null, null, meta)
 
   /* ================= AUTH ================= */
   // El cliente entra con DNI o correo electrónico (y también funciona el
@@ -381,7 +384,8 @@ export function KioscoProvider({ children }) {
         `Venta ${localCerrado ? '(con local cerrado) ' : ''}${enEspera ? 'en espera ' : ''}· ${money(total)} · ${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)${cliente ? ` · ${venta.clienteNombre}` : ''}${excepcionPausa ? ' · (Fiados pausados - autorizado por Admin)' : ''}.`,
         'venta',
         'ventas',
-        vendedor
+        vendedor,
+        { ventaId: venta.id }
       )
       if (cliente && metodo === 'fiado') {
         const c = n.clientes.find((x) => x.id === cliente.id)
@@ -389,7 +393,8 @@ export function KioscoProvider({ children }) {
           n,
           c,
           `Compra en cuenta corriente por ${money(total)} (${detalle.reduce((s, d) => s + d.cantidad, 0)} ítem(s)).`,
-          'consumo'
+          'consumo',
+          { ventaId: venta.id }
         )
       }
       // Regla antifraude: tras cada compra concreta se evalúa el
@@ -493,7 +498,8 @@ export function KioscoProvider({ children }) {
         `Venta anulada · ${money(venta.total)} (${venta.items.reduce((s, i) => s + i.cantidad, 0)} ítems)`,
         'venta',
         'ventas',
-        session?.nombre || 'mostrador'
+        session?.nombre || 'mostrador',
+        { ventaId }
       )
     })
     if (!remotoOk) {
@@ -809,7 +815,8 @@ export function KioscoProvider({ children }) {
         `Nuevo encargo de ${creado.clienteNombre} · ${creado.items.reduce((s, i) => s + i.cantidad, 0)} ítem(s) · ${money(creado.total)}.`,
         'encargo',
         'pedidos',
-        creado.clienteNombre
+        creado.clienteNombre,
+        { encargoId: creado.id }
       )
     })
     if (!remotoOk) {
@@ -817,6 +824,30 @@ export function KioscoProvider({ children }) {
       for (const p of productosSync) sync(fs.upsertProducto(p))
     }
     return creado
+  }
+
+  // "Tomar pedido": el vendedor se asigna el encargo en exclusiva para
+  // armarlo. La transacción remota aborta si otro dispositivo lo agarró
+  // primero — nunca dos personas preparan la misma bolsa.
+  const tomarEncargo = async (encargoId) => {
+    await sleep(60)
+    const quien = { id: session?.id || null, nombre: session?.nombre || 'mostrador' }
+    let remotoOk = false
+    if (remoto) {
+      try {
+        await fs.asignarEncargoAtomico(encargoId, quien)
+        remotoOk = true
+      } catch (e) {
+        if (!e.code) throw e
+        console.warn('[firebase] asignación de encargo atómica falló, modo degradado:', e)
+      }
+    }
+    let e = null
+    mutate((n) => {
+      e = ops.tomarEncargoDb(n, encargoId, quien)
+    })
+    if (e && !remotoOk) sync(fs.upsertEncargo(e))
+    return e
   }
 
   // Ajuste por faltante de góndola ("caso 999"): vendedor y admin pueden
@@ -1055,6 +1086,7 @@ export function KioscoProvider({ children }) {
     descartarSolicitud,
     persistencia: { modo: remoto ? 'firebase' : 'local', remoto, useFirebase: USE_FIREBASE },
     enviarEncargo,
+    tomarEncargo,
     ajustarItemEncargo,
     guardarTerceroEncargo,
     marcarEncargoListo,

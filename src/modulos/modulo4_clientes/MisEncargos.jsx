@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { BadgeCheck, Check, Clock3, PackageCheck, QrCode, Store } from 'lucide-react'
+import { BadgeCheck, Check, ChevronDown, Clock3, PackageCheck, QrCode, Store } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { fmtFechaHora, money } from '../../utils/format'
 import EmptyState from '../../components/ui/EmptyState'
@@ -57,6 +57,7 @@ export default function MisEncargos() {
   const { clienteSesion, encargos } = useKiosco()
   const [seleccion, setSeleccion] = useState([]) // ids de encargos listos marcados
   const [qrOpen, setQrOpen] = useState(false)
+  const [expandido, setExpandido] = useState(null) // id del anterior desplegado
 
   const mios = useMemo(
     () => (encargos || []).filter((e) => e.clienteId === clienteSesion?.id),
@@ -188,22 +189,66 @@ export default function MisEncargos() {
                       Ver historial
                     </button>
                   </div>
-                  {anteriores.map((e) => (
-                    <article className="history-row" key={e.id}>
-                      <span className="history-check" style={e.estado === 'cancelado' ? { background: '#fee2e2', color: '#b91c1c' } : undefined}>
-                        {e.estado === 'cancelado' ? '✕' : <Check size={17} />}
-                      </span>
-                      <div>
-                        <strong>#{e.id.slice(0, 8).toUpperCase()} · {ESTADO[e.estado]}</strong>
-                        <span>
-                          {fmtFechaHora(e.entregadoEn || e.fecha)} · {e.items.reduce((s, i) => s + i.cantidad, 0)} producto(s)
-                          {e.retiradoPor ? ` · Retiró ${e.retiradoPor}` : ''}
-                        </span>
+                  {anteriores.map((e) => {
+                    const abierto = expandido === e.id
+                    return (
+                      <div key={e.id}>
+                        {/* Fila compacta desplegable: toque → detalle de la compra */}
+                        <button
+                          type="button"
+                          className="history-row history-row-btn"
+                          onClick={() => setExpandido(abierto ? null : e.id)}
+                          aria-expanded={abierto}
+                          aria-label={`Ver detalle del encargo ${e.id.slice(0, 8).toUpperCase()}`}
+                        >
+                          <span className="history-check" style={e.estado === 'cancelado' ? { background: '#fee2e2', color: '#b91c1c' } : undefined}>
+                            {e.estado === 'cancelado' ? '✕' : <Check size={17} />}
+                          </span>
+                          <div>
+                            <strong>#{e.id.slice(0, 8).toUpperCase()} · {ESTADO[e.estado]}</strong>
+                            <span>
+                              {fmtFechaHora(e.entregadoEn || e.fecha)} · {e.items.reduce((s, i) => s + i.cantidad, 0)} producto(s)
+                              {e.retiradoPor ? ` · Retiró ${e.retiradoPor}` : ''}
+                            </span>
+                          </div>
+                          <b>{money(e.total)}</b>
+                          <ChevronDown
+                            className="history-clock"
+                            size={17}
+                            style={{ transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }}
+                          />
+                        </button>
+                        {/* Detalle desplegado: qué compró, cuánto pagó y quién retiró */}
+                        {abierto && (
+                          <div className="history-expand">
+                            <ul className="flex flex-col gap-1.5">
+                              {e.items.map((i) => (
+                                <li key={i.productoId} className="flex items-center justify-between gap-3 text-[13px] text-slate-600">
+                                  <span className="min-w-0 truncate">{i.cantidad}× {i.nombre} <span className="text-slate-400">({money(i.precio)} c/u)</span></span>
+                                  <span className="shrink-0 font-semibold text-slate-700">{money(i.precio * i.cantidad)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                            {(e.itemsFaltantes || []).length > 0 && (
+                              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-700">
+                                Sin stock en góndola se descontó: {e.itemsFaltantes.map((f) => `${f.cantidad}× ${f.nombre}`).join(', ')}.
+                              </p>
+                            )}
+                            <div className="mt-3 flex items-center justify-between border-t border-dashed border-slate-200 pt-2.5 text-[13px] font-bold text-slate-800">
+                              <span>{e.estado === 'cancelado' ? 'Total del pedido' : 'Total abonado'}</span>
+                              <span className="text-brand">{money(e.total)}</span>
+                            </div>
+                            <p className="mt-1.5 text-[11px] text-slate-400">
+                              Pedido {fmtFechaHora(e.fecha)}
+                              {e.entregadoEn ? ` · Retirado ${fmtFechaHora(e.entregadoEn)}` : ''}
+                              {e.retiradoPor ? ` · Retiró ${e.retiradoPor}` : ''}
+                              {e.preparadoPor ? ` · Armó ${e.preparadoPor}` : ''}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      <b>{money(e.total)}</b>
-                      <Clock3 className="history-clock" size={17} />
-                    </article>
-                  ))}
+                    )
+                  })}
                 </section>
               )}
             </>
