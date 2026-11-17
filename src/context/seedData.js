@@ -45,6 +45,9 @@ export function buildSeed() {
       fiadosActivos: true,
       encargosActivos: true,
       recibiendoEncargos: true,
+      // Monto mínimo del pedido para poder enviar un encargo (0 = sin
+      // mínimo, pedidos libres de cualquier valor).
+      montoMinimoEncargo: 0,
     },
 
     productos: [

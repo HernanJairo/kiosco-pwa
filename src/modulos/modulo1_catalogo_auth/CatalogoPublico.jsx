@@ -151,6 +151,12 @@ export default function CatalogoPublico() {
     .filter(Boolean)
   const totalPedido = itemsDetalle.reduce((s, i) => s + i.precio * i.cantidad, 0)
   const cantPedido = itemsDetalle.reduce((s, i) => s + i.cantidad, 0)
+  // Regla del negocio: el admin puede exigir un monto mínimo para
+  // encargos (0 = sin mínimo). Se avisa cuánto falta y se bloquea
+  // "Confirmar encargo" hasta alcanzarlo.
+  const minEncargo = Math.max(0, Number(config?.montoMinimoEncargo) || 0)
+  const faltaMinimo = Math.max(0, minEncargo - totalPedido)
+  const bajoMinimo = minEncargo > 0 && cantPedido > 0 && totalPedido < minEncargo
 
   // "Ingresá a tu cuenta" (visitante): vuelve a la vista de login del landing.
   const irLogin = () => window.dispatchEvent(new CustomEvent('yapa:login'))
@@ -181,6 +187,7 @@ export default function CatalogoPublico() {
   }
 
   const mandarEncargo = async () => {
+    if (bajoMinimo) return // botón deshabilitado; doble seguro
     setEnviando(true)
     try {
       const tercero =
@@ -519,6 +526,11 @@ export default function CatalogoPublico() {
                     <span>Total del pedido</span>
                     <strong>{money(totalPedido)}</strong>
                   </div>
+                  {bajoMinimo && (
+                    <p className="min-order-note">
+                      El monto mínimo para hacer encargos es de {money(minEncargo)} (te faltan {money(faltaMinimo)} para enviar el pedido)
+                    </p>
+                  )}
                   <div className="checkout-actions">
                     <button
                       className="express-button"
@@ -630,12 +642,18 @@ export default function CatalogoPublico() {
                 <span>{cantPedido} productos</span>
                 <strong>{money(totalPedido)}</strong>
               </div>
+              {bajoMinimo && (
+                <p className="min-order-note">
+                  El monto mínimo para hacer encargos es de {money(minEncargo)} (te faltan {money(faltaMinimo)} para enviar el pedido)
+                </p>
+              )}
               <button
                 className="primary-action full-action"
                 disabled={
                   enviando ||
                   !esCliente ||
                   !quienRetira ||
+                  bajoMinimo ||
                   (quienRetira === 'tercero' && (!terceroNombre.trim() || !terceroDni.trim()))
                 }
                 onClick={mandarEncargo}

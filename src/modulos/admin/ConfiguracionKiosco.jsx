@@ -195,6 +195,15 @@ export default function ConfiguracionKiosco() {
             onChange={(e) => setForm({ ...form, limiteFiadoGlobal: Number(e.target.value) || 0 })}
             required
           />
+          {/* Mínimo del pedido para encargos: 0 = libre; el carrito del
+              cliente bloquea "Confirmar encargo" hasta alcanzarlo. */}
+          <Input
+            label="Monto mínimo para hacer encargos ($)"
+            type="number"
+            min="0"
+            value={form.montoMinimoEncargo ?? 0}
+            onChange={(e) => setForm({ ...form, montoMinimoEncargo: Math.max(0, Number(e.target.value) || 0) })}
+          />
           {/* Regla antifraude: desbloqueo automático de la Cuenta
               Corriente cuando el cliente cumple AMBOS requisitos. */}
           <div className="sm:col-span-2 rounded-xl bg-[#EBF7FD] px-4 py-3">
