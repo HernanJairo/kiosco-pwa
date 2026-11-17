@@ -74,6 +74,11 @@ export default function TopBar({ onMenu }) {
   } = useKiosco()
   const [solicitudesOpen, setSolicitudesOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const notifScrollRef = useRef(null)
+  // Timestamps reales de las alertas vivas (stock bajo): se fijan la
+  // primera vez que aparecen para ordenarlas dentro de la línea de
+  // tiempo sin tapar las notificaciones que llegan después.
+  const [alertasTs, setAlertasTs] = useState({})
   const [acercaOpen, setAcercaOpen] = useState(false)
   const [perfilOpen, setPerfilOpen] = useState(false)
   const [busyId, setBusyId] = useState(null)
@@ -98,19 +103,25 @@ export default function TopBar({ onMenu }) {
     const items = (notificaciones || []).filter(
       (n) => n.para === claveFeed || (esAdmin && n.para === 'admin')
     )
-    // Alertas vivas (estado actual, no eventos): stock por debajo del mínimo.
+    // Alertas vivas (estado actual, no eventos): stock por debajo del
+    // mínimo. Llevan el timestamp real de cuándo apareció la alerta,
+    // así se intercalan en la línea de tiempo en vez de empujar hacia
+    // abajo las notificaciones nuevas (solicitudes de PIN, encargos…).
     const vivas = puedeAlternar
       ? productos
           .filter((p) => p.stock < 5)
           .map((p) => ({
             id: `stock-${p.id}`,
-            fecha: null,
+            fecha: alertasTs[`stock-${p.id}`] || null,
             texto: `Stock bajo: ${p.nombre} — quedan ${p.stock} unidad${p.stock === 1 ? '' : 'es'}.`,
             tipo: 'stock',
+            viva: true,
           }))
       : []
-    return [...vivas, ...items]
-  }, [notificaciones, claveFeed, esAdmin, puedeAlternar, productos])
+    // Orden estricto: siempre lo más reciente primero (createdAt/fecha DESC).
+    const ts = (x) => new Date(x.createdAt || x.fecha || 0).getTime() || 0
+    return [...vivas, ...items].sort((a, b) => ts(b) - ts(a))
+  }, [notificaciones, claveFeed, esAdmin, puedeAlternar, productos, alertasTs])
 
   // Leídas por usuario en este dispositivo (las notificaciones viven en la
   // base compartida; el estado de lectura es personal).
@@ -133,6 +144,33 @@ export default function TopBar({ onMenu }) {
   const noLeidas = feed.filter((n) => !leidas.includes(n.id)).length
   const marcarTodas = () => persistLeidas([...new Set([...leidas, ...feed.map((n) => n.id)])])
   /* -------------------------------------------- */
+
+  // Al abrir la campanita el scroll arranca arriba: lo primero que se
+  // ve es lo más reciente que pasó en el kiosco.
+  useEffect(() => {
+    if (notifOpen && notifScrollRef.current) notifScrollRef.current.scrollTop = 0
+  }, [notifOpen])
+
+  // Mantiene el timestamp real de cada alerta de stock vivo: conserva
+  // el primero mientras siga vigente y lo suelta cuando el producto se
+  // repone (la próxima caída cuenta como alerta nueva).
+  useEffect(() => {
+    if (!puedeAlternar) return
+    const ahora = new Date().toISOString()
+    // eslint-disable-next-line react/set-state-in-effect -- marca de tiempo real: no se deriva del render
+    setAlertasTs((prev) => {
+      const next = {}
+      for (const p of productos) {
+        if (p.stock < 5) {
+          const clave = `stock-${p.id}`
+          next[clave] = prev[clave] || ahora
+        }
+      }
+      const claves = Object.keys(next)
+      if (claves.length === Object.keys(prev).length && claves.every((k) => prev[k] === next[k])) return prev
+      return next
+    })
+  }, [productos, puedeAlternar])
 
   // Accesos que viven en el cajón lateral (drawer móvil): "Mi Perfil"
   // del equipo y "Acerca de Yapa" para cualquier rol.
@@ -321,7 +359,7 @@ export default function TopBar({ onMenu }) {
                     <ChevronRight size={14} className="ml-auto" />
                   </button>
                 )}
-                <div className="max-h-[24rem] overflow-y-auto">
+                <div ref={notifScrollRef} className="max-h-[24rem] overflow-y-auto">
                   {feed.length === 0 ? (
                     <EmptyState
                       icon={PackageOpen}
@@ -347,7 +385,9 @@ export default function TopBar({ onMenu }) {
                             <div className="min-w-0 flex-1">
                               <p className="text-[13px] leading-snug text-slate-700">{n.texto}</p>
                               <p className="mt-0.5 text-[11px] text-slate-400">
-                                {n.fecha ? fmtFechaHora(n.fecha) : 'Alerta vigente'}
+                                {n.viva
+                                  ? `Alerta vigente${n.fecha ? ` · ${fmtFechaHora(n.fecha)}` : ''}`
+                                  : fmtFechaHora(n.fecha)}
                               </p>
                             </div>
                             {!leida && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />}

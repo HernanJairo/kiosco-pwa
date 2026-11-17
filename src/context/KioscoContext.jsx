@@ -21,6 +21,10 @@ const sleep = (ms = 160) => new Promise((r) => setTimeout(r, ms))
 const clone = (o) => JSON.parse(JSON.stringify(o))
 const uid = ops.uid
 
+// Timestamp de una notificación (createdAt nuevo / fecha histórico):
+// el feed siempre se ordena de más reciente a más antigua.
+const tsNotif = (x) => new Date(x?.createdAt || x?.fecha || 0).getTime() || 0
+
 const KioscoContext = createContext(null)
 // eslint-disable-next-line react/only-export-components
 export const useKiosco = () => useContext(KioscoContext)
@@ -135,7 +139,15 @@ export function KioscoProvider({ children }) {
         offs.push(
           fs.suscribir(col, (docs) => {
             const n = clone(dbRef.current)
-            n[col] = col === 'productos' ? docs.map(normalizarFotos) : docs
+            // Firestore no garantiza orden de documentos: el centro de
+            // notificaciones se reordena al llegar, de más reciente a
+            // más antigua (createdAt/fecha descendente).
+            n[col] =
+              col === 'productos'
+                ? docs.map(normalizarFotos)
+                : col === 'notificaciones'
+                  ? [...docs].sort((a, b) => tsNotif(b) - tsNotif(a))
+                  : docs
             commitDb(n)
           })
         )

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   ArrowDownLeft, ArrowRight, Check,
-  Clock3, HandCoins, Hourglass, NotebookPen, PackageCheck, PauseCircle, Plus, QrCode,
+  Clock3, HandCoins, Hourglass, KeyRound, NotebookPen, PackageCheck, PauseCircle, Plus, QrCode,
   Receipt, RotateCcw, ShieldCheck, ShoppingBag, Sparkles, Store, Wallet,
 } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
@@ -11,6 +11,8 @@ import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import EmptyState from '../../components/ui/EmptyState'
+import Button from '../../components/ui/Button'
+import Input from '../../components/ui/Input'
 import SelectorAvatar from '../../components/ui/SelectorAvatar'
 import PagoTransferenciaModal from './PagoTransferenciaModal'
 import PedidoQRModal from './PedidoQRModal'
@@ -38,13 +40,50 @@ const MOV_ICON = {
 // el degradado limpio, acciones rápidas, últimos movimientos y encargo
 // activo — todo conectado a useKiosco() y a los modales reales.
 export default function BilleteraCliente() {
-  const { clienteSesion: a, solicitudes, ventas, encargos, updateCliente, config } = useKiosco()
+  const { clienteSesion: a, solicitudes, ventas, encargos, updateCliente, config, notify } = useKiosco()
   const [pagoTipo, setPagoTipo] = useState(null) // 'deuda' | 'recarga' | null
   const [perfilOpen, setPerfilOpen] = useState(false)
   const [qrPedido, setQrPedido] = useState(null) // encargo listo → QR de retiro
   const [llamaOk, setLlamaOk] = useState(true)
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pins, setPins] = useState({ actual: '', nuevo: '', repite: '' })
+  const [pinBusy, setPinBusy] = useState(false)
 
   if (!a) return null
+
+  // "Cambiar mi PIN": valida el PIN vigente, exige 4 dígitos nuevos y
+  // persiste el cliente completo en KioscoContext / Firestore.
+  const guardarPin = async (e) => {
+    e.preventDefault()
+    if (!/^\d{4}$/.test(pins.actual)) return notify('Ingresá tu PIN actual de 4 dígitos.', 'error')
+    if (pins.actual !== String(a.pin)) return notify('El PIN actual no coincide.', 'error')
+    if (!/^\d{4}$/.test(pins.nuevo)) return notify('El PIN nuevo debe tener exactamente 4 dígitos.', 'error')
+    if (pins.nuevo === pins.actual) return notify('El PIN nuevo debe ser distinto al actual.', 'error')
+    if (pins.nuevo !== pins.repite) return notify('La confirmación no coincide con el PIN nuevo.', 'error')
+    setPinBusy(true)
+    try {
+      await updateCliente(a.id, {
+        pin: pins.nuevo,
+        movimientos: [
+          {
+            id: `pin-${Date.now()}`,
+            fecha: new Date().toISOString(),
+            tipo: 'seguridad',
+            detalle: 'Cambiaste tu PIN de acceso.',
+            monto: 0,
+          },
+          ...(a.movimientos || []),
+        ],
+      })
+      notify('PIN actualizado. Usalo en tu próximo ingreso.')
+      setPins({ actual: '', nuevo: '', repite: '' })
+      setPinOpen(false)
+    } catch (err) {
+      notify(err.message, 'error')
+    } finally {
+      setPinBusy(false)
+    }
+  }
 
   const pendientes = a.fiados.filter((f) => !f.pagado && f.pendiente > 0)
   const saldoFavor = Math.max(0, a.saldo - a.deuda)
@@ -81,14 +120,26 @@ export default function BilleteraCliente() {
             <h1>Hola, {a.nombre} <span>!</span></h1>
             <p>Lo de siempre, con una Yapa más.</p>
           </div>
-          <button
-            type="button"
-            className="welcome-badge"
-            onClick={() => setPerfilOpen(true)}
-            title="Personalizar avatar o foto"
-          >
-            <Sparkles size={16} /><span>Cliente del barrio</span>
-          </button>
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              className="welcome-badge"
+              onClick={() => setPerfilOpen(true)}
+              title="Personalizar avatar o foto"
+            >
+              <Sparkles size={16} /><span>Cliente del barrio</span>
+            </button>
+            {/* Acceso discreto a la seguridad de la cuenta */}
+            <button
+              type="button"
+              className="link-button"
+              onClick={() => setPinOpen(true)}
+              title="Cambiar tu PIN de acceso"
+              aria-label="Cambiar mi PIN"
+            >
+              <KeyRound size={13} /><span>Cambiar mi PIN</span>
+            </button>
+          </div>
         </section>
 
         <section className="wallet-panel wallet-panel-single" role="tabpanel" aria-label="Mi Billetera">
@@ -305,6 +356,55 @@ export default function BilleteraCliente() {
 
       <Modal open={perfilOpen} onClose={() => setPerfilOpen(false)} title="Tu avatar y foto" wide>
         <SelectorAvatar cliente={a} />
+      </Modal>
+
+      {/* Cambio de PIN propio del cliente: exige el PIN vigente. */}
+      <Modal open={pinOpen} onClose={() => setPinOpen(false)} title="Cambiar mi PIN">
+        <form onSubmit={guardarPin} className="flex flex-col gap-3">
+          <p className="text-sm text-slate-600">
+            Ingresá tu PIN actual y elegí uno nuevo de <b>4 dígitos</b> que solo vos conozcas.
+          </p>
+          <Input
+            label="PIN actual"
+            inputMode="numeric"
+            maxLength={4}
+            type="password"
+            autoFocus
+            value={pins.actual}
+            onChange={(e) => setPins((f) => ({ ...f, actual: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            required
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Nuevo PIN"
+              inputMode="numeric"
+              maxLength={4}
+              type="password"
+              value={pins.nuevo}
+              onChange={(e) => setPins((f) => ({ ...f, nuevo: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+              placeholder="4 dígitos"
+              required
+            />
+            <Input
+              label="Confirmar nuevo PIN"
+              inputMode="numeric"
+              maxLength={4}
+              type="password"
+              value={pins.repite}
+              onChange={(e) => setPins((f) => ({ ...f, repite: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+              placeholder="Repetir"
+              required
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setPinOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={pinBusy}>
+              <KeyRound size={14} /> {pinBusy ? 'Guardando…' : 'Actualizar PIN'}
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   )
