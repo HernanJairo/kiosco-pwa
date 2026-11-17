@@ -695,6 +695,23 @@ export function tomarEncargoDb(db, encargoId, quien) {
   return e
 }
 
+// Liberación de pedido: el mismo vendedor que lo tomó (o un admin, por
+// si alguien dejó un pedido agarrado y se fue) lo suelta de vuelta a la
+// cola "en espera" para que cualquier otro lo pueda seleccionar.
+export function liberarEncargoDb(db, encargoId, { quienId, quienNombre, esAdmin }) {
+  const e = (db.encargos || []).find((x) => x.id === encargoId)
+  if (!e) throw new Error('Encargo no encontrado.')
+  if (e.estado !== 'en_preparacion') throw new Error('El encargo ya no está en preparación.')
+  if (!e.asignadoA?.nombre) throw new Error('El pedido ya está libre.')
+  const esMio = quienId != null ? e.asignadoA.id === quienId : e.asignadoA.nombre === quienNombre
+  if (!esAdmin && !esMio) throw new Error(`El pedido lo está armando ${e.asignadoA.nombre}.`)
+  e.liberadoPor = quienNombre || 'mostrador'
+  e.liberadoEn = new Date().toISOString()
+  e.asignadoA = null
+  e.asignadoEn = null
+  return e
+}
+
 export function marcarEncargoListoDb(db, encargoId, { preparadoPor }) {
   const e = (db.encargos || []).find((x) => x.id === encargoId)
   if (!e) throw new Error('Encargo no encontrado.')

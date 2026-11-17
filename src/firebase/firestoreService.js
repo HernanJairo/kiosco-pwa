@@ -238,6 +238,34 @@ export function asignarEncargoAtomico(encargoId, quien) {
   })
 }
 
+// Liberación de pedido: solo quien lo tomó (o un admin) puede
+// devolverlo a la cola "en espera". La tx relee el doc remoto para no
+// soltar una asignación que cambió en otro dispositivo.
+export function liberarEncargoAtomico(encargoId, quien, esAdmin) {
+  return runTransaction(db, async (tx) => {
+    const eRef = doc(db, COLECCIONES.encargos, String(encargoId))
+    const eSnap = await tx.get(eRef)
+    if (!eSnap.exists()) throw new Error('Encargo no encontrado en el servidor.')
+    const remoto = eSnap.data()
+    if (remoto.estado !== 'en_preparacion') {
+      throw new Error('El encargo ya no está en preparación.')
+    }
+    if (!remoto.asignadoA?.nombre) throw new Error('El pedido ya está libre.')
+    const esMio = quien.id != null
+      ? remoto.asignadoA.id === quien.id
+      : remoto.asignadoA.nombre === quien.nombre
+    if (!esAdmin && !esMio) {
+      throw new Error(`El pedido lo está armando ${remoto.asignadoA.nombre}.`)
+    }
+    tx.update(eRef, {
+      asignadoA: null,
+      asignadoEn: null,
+      liberadoPor: quien.nombre,
+      liberadoEn: new Date().toISOString(),
+    })
+  })
+}
+
 // Cancelación de encargo: relee el encargo remoto y aborta si ya fue
 // cerrado; devuelve la reserva con increment() (atómico en servidor).
 export function cancelarEncargoAtomico(encargoId) {

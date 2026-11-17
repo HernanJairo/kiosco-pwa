@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronDown, Hand, Loader2, Lock, Minus, PackageCheck, Printer, ShoppingCart, Trash2 } from 'lucide-react'
+import { ChevronDown, Hand, Loader2, Lock, Minus, PackageCheck, Printer, ShoppingCart, Trash2, Undo2 } from 'lucide-react'
 import { useKiosco } from '../../context/KioscoContext'
 import { fmtFechaHora, money } from '../../utils/format'
 import Badge from '../../components/ui/Badge'
@@ -25,13 +25,14 @@ const TONO_PILL = {
 //      pedido" (asignación exclusiva: la tx remota aborta si otro lo
 //      agarró primero).
 //   2) En preparación → solo el vendedor que lo seleccionó (o un admin)
-//      ve los botones; al resto le figura "Atendiendo: <nombre>".
+//      ve los botones ("Marcar listo" y "Liberar pedido" para soltarlo
+//      de vuelta a espera); al resto le figura "Atendiendo: <nombre>".
 //   3) Listos para retirar → indica quién lo preparó; el cobro/despacho
 //      se hace escaneando el QR de retiro en el POS o con "Cobrar en caja".
 export default function EncargosPanel() {
   const {
     productos, encargos, config, updateConfig, session,
-    tomarEncargo, marcarEncargoListo, cancelarEncargo, ajustarItemEncargo, notify,
+    tomarEncargo, liberarEncargo, marcarEncargoListo, cancelarEncargo, ajustarItemEncargo, notify,
   } = useKiosco()
   const [busy, setBusy] = useState(false)
   const [rotuloEncargo, setRotuloEncargo] = useState(null) // encargo a imprimir
@@ -223,19 +224,36 @@ export default function EncargosPanel() {
               )}
               {modo === 'seleccionado' && (
                 mio ? (
-                  <Button
-                    className="flex-1 rounded-2xl py-3 text-sm font-bold"
-                    disabled={busy}
-                    onClick={() =>
-                      ejecutar(
-                        () => marcarEncargoListo(e.id),
-                        `Pedido #${e.id.slice(0, 8).toUpperCase()} listo para retirar.`
-                      )
-                    }
-                  >
-                    {busy ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />}
-                    Marcar listo para retirar
-                  </Button>
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Button
+                      className="w-full rounded-2xl py-3 text-sm font-bold"
+                      disabled={busy}
+                      onClick={() =>
+                        ejecutar(
+                          () => marcarEncargoListo(e.id),
+                          `Pedido #${e.id.slice(0, 8).toUpperCase()} listo para retirar.`
+                        )
+                      }
+                    >
+                      {busy ? <Loader2 size={16} className="animate-spin" /> : <PackageCheck size={16} />}
+                      Marcar listo para retirar
+                    </Button>
+                    {/* "Soltar" el pedido: lo devuelve a En espera para
+                        que otro vendedor pueda tomarlo (dueño o admin). */}
+                    <Button
+                      variant="ghost"
+                      className="w-full rounded-2xl py-2 text-xs font-bold text-slate-500"
+                      disabled={busy}
+                      onClick={() =>
+                        ejecutar(
+                          () => liberarEncargo(e.id),
+                          'Pedido liberado y devuelto a espera.'
+                        )
+                      }
+                    >
+                      <Undo2 size={14} /> Liberar pedido
+                    </Button>
+                  </div>
                 ) : (
                   <p className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#F6F6F6] py-3 text-[12px] font-bold text-slate-400">
                     <Lock size={14} /> Atendiendo: {e.asignadoA.nombre}

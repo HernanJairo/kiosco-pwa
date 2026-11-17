@@ -850,6 +850,35 @@ export function KioscoProvider({ children }) {
     return e
   }
 
+  // "Liberar pedido": quien lo tomó (o un admin) lo devuelve a la cola
+  // "en espera" limpiando la asignación. La tx remota relee el doc y
+  // solo deja soltarlo a su dueño, así nadie pisa una reasignación.
+  const liberarEncargo = async (encargoId) => {
+    await sleep(60)
+    const quien = { id: session?.id || null, nombre: session?.nombre || 'mostrador' }
+    const esAdmin = session?.rol === 'admin'
+    let remotoOk = false
+    if (remoto) {
+      try {
+        await fs.liberarEncargoAtomico(encargoId, quien, esAdmin)
+        remotoOk = true
+      } catch (e) {
+        if (!e.code) throw e
+        console.warn('[firebase] liberación de encargo atómica falló, modo degradado:', e)
+      }
+    }
+    let e = null
+    mutate((n) => {
+      e = ops.liberarEncargoDb(n, encargoId, {
+        quienId: quien.id,
+        quienNombre: quien.nombre,
+        esAdmin,
+      })
+    })
+    if (e && !remotoOk) sync(fs.upsertEncargo(e))
+    return e
+  }
+
   // Ajuste por faltante de góndola ("caso 999"): vendedor y admin pueden
   // quitar ítems del pedido; el stock reservado vuelve a la góndola.
   const ajustarItemEncargo = async (encargoId, productoId, cantidadQuitar) => {
@@ -1087,6 +1116,7 @@ export function KioscoProvider({ children }) {
     persistencia: { modo: remoto ? 'firebase' : 'local', remoto, useFirebase: USE_FIREBASE },
     enviarEncargo,
     tomarEncargo,
+    liberarEncargo,
     ajustarItemEncargo,
     guardarTerceroEncargo,
     marcarEncargoListo,
